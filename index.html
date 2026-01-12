@@ -8,7 +8,7 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts: Çeşitli yazı stilleri için -->
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Kalam:wght@300;400;700&family=Merriweather:wght@300;400;700&family=Courier+Prime:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
     
     <!-- Lucide Icons -->
@@ -23,7 +23,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Firebase Nesneleri
         window.firebaseData = { db: null, auth: null, user: null, active: false };
 
         const savedApiKey = localStorage.getItem('fb_api_key');
@@ -40,11 +39,10 @@
         };
 
         async function initApp() {
-            // Önce yerel verileri yükle (Offline Öncelikli)
-            window.loadLocalNotes();
+            window.loadLocalNotes(); // Önce yerel veriyi göster (Hız için)
 
             if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
-                console.log("Firebase API Key eksik, yerel modda devam ediliyor.");
+                console.log("Yerel mod.");
                 return;
             }
 
@@ -52,11 +50,9 @@
                 const app = initializeApp(firebaseConfig);
                 const auth = getAuth(app);
                 const db = getFirestore(app);
-                
                 window.firebaseData.auth = auth;
                 window.firebaseData.db = db;
 
-                // Auth Başlat
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
@@ -71,9 +67,7 @@
                         initLiveListener(user.uid);
                     }
                 });
-            } catch (e) {
-                console.error("Firebase Hatası:", e);
-            }
+            } catch (e) { console.error("Firebase:", e); }
         }
 
         let unsubscribe = null;
@@ -83,71 +77,57 @@
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const cloudNotes = [];
                 snapshot.forEach(d => cloudNotes.push({ id: d.id, ...d.data() }));
-                // Buluttan gelen veriyle yereli birleştir
                 window.syncNotes(cloudNotes);
-            }, (err) => {
-                console.error("Veri okuma hatası:", err);
             });
         }
 
-        // Başlat
         initApp();
 
-        // CRUD Global Fonksiyonlar
+        // CRUD (Hızlandırılmış)
         window.saveNoteToStorage = async (note) => {
-            // 1. Yerele Kaydet
+            // Yerele hemen kaydet
             const localNote = { ...note, id: note.id || 'loc_' + Date.now(), updatedAt: Date.now() };
             const existingIdx = window.localNotes.findIndex(n => n.id === note.id);
-            
             if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
             else window.localNotes.push(localNote);
-            
             window.saveLocalToDisk();
 
-            // 2. Buluta Kaydet (Varsa)
+            // Buluta arkada kaydet (Await etme, UI donmasın)
             if (window.firebaseData.active) {
-                try {
-                    const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
-                    // Eğer ID "loc_" ile başlıyorsa yeni doküman, değilse güncelleme
-                    if (note.id && !note.id.startsWith('loc_')) {
-                        await updateDoc(doc(col, note.id), { ...note, updatedAt: serverTimestamp() });
-                    } else {
-                        await addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-                    }
-                } catch(e) { console.error("Bulut kaydı hatası:", e); }
+                const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
+                if (note.id && !note.id.startsWith('loc_')) {
+                    updateDoc(doc(col, note.id), { ...note, updatedAt: serverTimestamp() });
+                } else {
+                    addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                }
             }
         };
 
         window.deleteNoteFromStorage = async (id) => {
+            // Yerelden hemen sil
             window.localNotes = window.localNotes.filter(n => n.id !== id);
             window.saveLocalToDisk();
 
+            // Buluttan arkada sil
             if (window.firebaseData.active && !id.startsWith('loc_')) {
-                try {
-                    await deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
-                } catch(e) { console.error("Bulut silme hatası:", e); }
+                deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
             }
         };
-
     </script>
 
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f8fafc; /* Daha açık, temiz arka plan */
-            background-image: 
-                linear-gradient(rgba(226, 232, 240, 0.6) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
-            background-size: 40px 40px;
+            background-color: #f8fafc;
+            background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+            background-size: 32px 32px;
         }
 
-        /* Font Aileleri */
         .font-hand { font-family: 'Kalam', cursive; }
         .font-serif { font-family: 'Merriweather', serif; }
         .font-mono { font-family: 'Courier Prime', monospace; }
         .font-sans { font-family: 'Inter', sans-serif; }
 
-        /* Kart Stilleri */
         .note-card {
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             position: relative;
@@ -161,7 +141,6 @@
             z-index: 10;
         }
 
-        /* Kategori Renkleri (Hafif ve Modern) */
         .cat-tarih { background: #fee2e2; color: #7f1d1d; border-top: 6px solid #ef4444; }
         .cat-dini { background: #dcfce7; color: #14532d; border-top: 6px solid #22c55e; }
         .cat-siyasi { background: #dbeafe; color: #1e3a8a; border-top: 6px solid #3b82f6; }
@@ -171,7 +150,6 @@
         .cat-is { background: #f1f5f9; color: #334155; border-top: 6px solid #64748b; }
         .cat-diger { background: #f3f4f6; color: #1f2937; border-top: 6px solid #9ca3af; }
 
-        /* FAB (Yüzen Buton) */
         .fab {
             position: fixed;
             bottom: 24px;
@@ -190,19 +168,16 @@
         }
         .fab:active { transform: scale(0.90); }
 
-        /* Modal Toolbar */
         .editor-toolbar {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(5px);
             border-top: 1px solid #e5e7eb;
         }
 
-        /* Gizli Mod */
         body.stealth-mode { background: #000 !important; overflow: hidden; }
         body.stealth-mode header, body.stealth-mode main, body.stealth-mode .fab { opacity: 0; pointer-events: none; }
         body.stealth-mode #stealth-overlay { display: flex; }
 
-        /* Animasyonlar */
         @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
         .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
@@ -247,13 +222,11 @@
     <!-- Ana Alan -->
     <main class="flex-1 overflow-y-auto p-4 pb-24">
         <div class="max-w-5xl mx-auto space-y-6">
-            <!-- Arama -->
             <div class="relative group">
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
                 <input type="text" id="searchInput" onkeyup="search()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
             </div>
 
-            <!-- Liste -->
             <div id="notes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             
             <div id="empty-state" class="hidden text-center py-20 opacity-50">
@@ -263,63 +236,63 @@
         </div>
     </main>
 
-    <!-- FAB (Ekleme Butonu) -->
-    <button onclick="openModal()" class="fab">
+    <!-- FAB -->
+    <button onclick="openModal()" class="fab hover:scale-110 transition-transform">
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
 
-    <!-- NOT DÜZENLEME MODALI -->
+    <!-- NOT MODALI (TAM EKRAN OKUMA İÇİN OPTİMİZE EDİLDİ) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
-        <div class="absolute inset-x-0 bottom-0 md:top-10 md:bottom-10 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl bg-white rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-y-full" id="modal-panel">
+        <div class="absolute inset-0 md:inset-x-0 md:bottom-6 md:top-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-y-full" id="modal-panel">
             
-            <!-- Modal Header -->
+            <!-- Header -->
             <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white z-10">
+                <button onclick="closeModal()" class="md:hidden mr-3 text-gray-500"><i data-lucide="arrow-left"></i></button>
                 <input type="text" id="note-title" placeholder="Başlık" class="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 w-full text-gray-800 placeholder-gray-300">
-                <div class="flex gap-2">
-                    <button onclick="deleteCurrentNote()" id="btn-delete" class="hidden text-red-400 hover:bg-red-50 p-2 rounded-full"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
-                    <button onclick="saveNote()" class="bg-black text-white px-5 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
+                <div class="flex gap-2 items-center">
+                    <button onclick="deleteCurrentNote()" id="btn-delete" class="hidden text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Sil"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                    <button onclick="saveNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
                 </div>
             </div>
 
-            <!-- Kategori Seçimi -->
-            <div class="px-6 py-2 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar" id="modal-cats"></div>
+            <!-- Kategori -->
+            <div class="px-6 py-3 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-100" id="modal-cats"></div>
 
-            <!-- Editör Alanı -->
-            <div class="flex-1 relative bg-white group">
-                <textarea id="note-content" class="w-full h-full p-6 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed placeholder-gray-300 font-hand text-gray-700" placeholder="Buraya yazın..."></textarea>
+            <!-- Editör (Tam Ekran Okuma) -->
+            <div class="flex-1 relative bg-white group overflow-y-auto">
+                <!-- min-h-full ve geniş padding ile okuma rahatlığı -->
+                <textarea id="note-content" class="w-full h-full min-h-[50vh] p-6 lg:p-8 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed placeholder-gray-300 font-hand text-gray-700 outline-none" placeholder="Notunuzu buraya yazın..."></textarea>
                 
-                <!-- AI Yükleniyor -->
-                <div id="ai-loading" class="absolute inset-0 bg-white/80 z-20 hidden flex-col items-center justify-center">
+                <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
                     <div class="loader mb-3"></div>
-                    <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Çalışıyor...</p>
+                    <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
                 </div>
             </div>
 
-            <!-- Alt Toolbar (Format & AI & Ses) -->
-            <div class="editor-toolbar p-3 pb-safe">
+            <!-- Toolbar -->
+            <div class="editor-toolbar p-3 pb-safe border-t border-gray-100">
                 <div class="flex justify-between items-center max-w-lg mx-auto">
-                    <!-- Font Seçici -->
                     <div class="flex gap-1">
-                        <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand" title="El Yazısı">Aa</button>
-                        <button onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif" title="Kitap">Aa</button>
-                        <button onclick="setFont('font-sans')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-sans" title="Modern">Aa</button>
-                        <button onclick="setFont('font-mono')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-mono" title="Daktilo">Aa</button>
+                        <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-sm">Aa</button>
+                        <button onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-sm">Aa</button>
+                        <button onclick="setFont('font-sans')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-sans text-sm">Aa</button>
                     </div>
-
                     <div class="w-px h-6 bg-gray-200 mx-2"></div>
-
-                    <!-- AI ve Ses -->
-                    <div class="flex gap-2">
-                        <button onclick="toggleVoice()" id="mic-btn" class="p-3 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors"><i data-lucide="mic" class="w-5 h-5"></i></button>
+                    <div class="flex gap-3">
+                        <button onclick="toggleVoice()" id="mic-btn" class="p-3 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors shadow-sm"><i data-lucide="mic" class="w-5 h-5"></i></button>
                         <div class="relative">
-                            <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
-                            <!-- AI Popup -->
-                            <div id="ai-popup" class="absolute bottom-14 right-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 p-2 hidden z-30">
-                                <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
-                                <button onclick="runAI('summarize')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 text-blue-500"></i> Özetle</button>
-                                <button onclick="runAI('expand')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="maximize" class="w-4 h-4 text-purple-500"></i> Genişlet</button>
-                                <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 border-t mt-1 pt-2"><i data-lucide="smartphone" class="w-4 h-4 text-green-600"></i> WhatsApp</button>
+                            <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm ring-2 ring-indigo-100 ring-offset-1"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
+                            <div id="ai-popup" class="absolute bottom-16 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 hidden z-30 transform origin-bottom-right transition-all">
+                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">İçerik Geliştirme</div>
+                                <button onclick="runAI('continue')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="pen-tool" class="w-4 h-4 text-orange-500"></i> Devamını Getir</button>
+                                <button onclick="runAI('formal')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="briefcase" class="w-4 h-4 text-blue-500"></i> Resmileştir</button>
+                                <button onclick="runAI('keypoints')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Ana Fikirler</button>
+                                <div class="h-px bg-gray-100 my-1"></div>
+                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
+                                <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
+                                <button onclick="runAI('summarize')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="file-text" class="w-4 h-4 text-gray-500"></i> Özetle</button>
+                                <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700 font-medium"><i data-lucide="smartphone" class="w-4 h-4"></i> WhatsApp Modu</button>
                             </div>
                         </div>
                     </div>
@@ -328,70 +301,78 @@
         </div>
     </div>
 
-    <!-- WhatsApp Modal -->
+    <!-- Diğer Modallar -->
     <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
-        <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[80vh]">
-            <div class="p-4 flex justify-between items-center">
-                <button onclick="closeWp()" class="text-white"><i data-lucide="x"></i></button>
-                <span class="text-xs font-mono text-gray-400" id="wp-count">0/700</span>
+        <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
+            <div class="p-4 flex justify-between items-center bg-gray-800">
+                <button onclick="closeWp()" class="text-white p-2 hover:bg-white/10 rounded-full"><i data-lucide="x"></i></button>
+                <span class="text-xs font-mono text-gray-400 bg-black/30 px-2 py-1 rounded" id="wp-count">0/700</span>
             </div>
-            <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500" style="background-color: #25D366;">
-                <textarea id="wp-text" class="w-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:ring-0 resize-none" rows="8" oninput="checkWpLimit()"></textarea>
+            <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500 relative" style="background-color: #25D366;">
+                <textarea id="wp-text" class="w-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:ring-0 resize-none overflow-hidden placeholder-white/50" rows="10" placeholder="Durum yazısı..." oninput="checkWpLimit()"></textarea>
             </div>
-            <div class="p-4 bg-gray-800 space-y-3">
-                <div class="flex justify-center gap-3">
-                    <button onclick="setWpColor('#25D366')" class="w-6 h-6 rounded-full bg-[#25D366] border border-white/20"></button>
-                    <button onclick="setWpColor('#FF5252')" class="w-6 h-6 rounded-full bg-[#FF5252] border border-white/20"></button>
-                    <button onclick="setWpColor('#448AFF')" class="w-6 h-6 rounded-full bg-[#448AFF] border border-white/20"></button>
-                    <button onclick="setWpColor('#7C4DFF')" class="w-6 h-6 rounded-full bg-[#7C4DFF] border border-white/20"></button>
-                    <button onclick="setWpColor('#212121')" class="w-6 h-6 rounded-full bg-[#212121] border border-white/20"></button>
+            <div class="p-4 bg-gray-900 space-y-4 border-t border-gray-800">
+                <div class="flex justify-center gap-4 overflow-x-auto py-2">
+                    <button onclick="setWpColor('#25D366')" class="w-8 h-8 rounded-full bg-[#25D366] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#FF5252')" class="w-8 h-8 rounded-full bg-[#FF5252] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#448AFF')" class="w-8 h-8 rounded-full bg-[#448AFF] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#7C4DFF')" class="w-8 h-8 rounded-full bg-[#7C4DFF] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#212121')" class="w-8 h-8 rounded-full bg-[#212121] border-2 border-white/20 hover:scale-110 transition-transform"></button>
                 </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="runAI('whatsapp')" class="bg-indigo-600 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> AI Sığdır</button>
-                    <button onclick="saveWpToNote()" class="bg-gray-700 text-white py-2 rounded-lg text-sm font-bold">Kaydet</button>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="runAI('whatsapp')" class="bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-gray-700 transition-colors"><i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i> AI Sığdır</button>
+                    <button onclick="saveWpToNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-indigo-900/20 transition-colors">Kaydet</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Ayarlar Modal -->
     <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
-            <h2 class="text-xl font-bold mb-4">Ayarlar</h2>
-            
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl transform transition-all scale-100">
+            <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800"><i data-lucide="settings" class="mr-2 text-indigo-600"></i> Ayarlar</h2>
             <div class="mb-4">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Gemini API Key (AI İçin)</label>
-                <input type="password" id="gemini-key" class="w-full border rounded-lg p-2 text-sm" placeholder="AIzaSy...">
+                <label class="block text-xs font-bold text-indigo-600 uppercase mb-1">Gemini API Key</label>
+                <input type="password" id="gemini-key" class="w-full border border-indigo-100 bg-indigo-50 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
-
             <div class="mb-6">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Firebase Config (Bulut İçin)</label>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Firebase Config</label>
                 <input type="password" id="fb-key" class="w-full border rounded-lg p-2 text-sm mb-2" placeholder="API Key">
                 <input type="text" id="fb-app" class="w-full border rounded-lg p-2 text-sm" placeholder="App ID">
             </div>
-
-            <div class="flex justify-between">
-                <button onclick="downloadBackup()" class="text-green-600 text-sm font-bold flex items-center"><i data-lucide="download" class="w-4 h-4 mr-1"></i> Yedekle</button>
+            <div class="flex justify-between items-center pt-2 border-t border-gray-100 mt-4">
+                <button onclick="downloadBackup()" class="text-green-600 text-sm font-bold flex items-center hover:bg-green-50 px-3 py-2 rounded-lg transition-colors"><i data-lucide="download" class="w-4 h-4 mr-2"></i> Yedekle</button>
                 <div class="flex gap-2">
-                    <button onclick="toggleSettings()" class="text-gray-500 text-sm">İptal</button>
-                    <button onclick="saveSettings()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Kaydet</button>
+                    <button onclick="toggleSettings()" class="text-gray-500 text-sm hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">İptal</button>
+                    <button onclick="saveSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">Kaydet</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast -->
+    <!-- Onay Modalı -->
+    <div id="confirm-modal" class="fixed inset-0 z-[60] hidden bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl text-center">
+            <div class="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Notu Sil?</h3>
+            <p class="text-sm text-gray-500 mb-6">Bu işlem geri alınamaz.</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Vazgeç</button>
+                <button onclick="performDelete()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium shadow-md">Evet, Sil</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[80] space-y-2 pointer-events-none"></div>
 
-    <!-- Gizli Mod Overlay -->
     <div id="stealth-overlay" class="fixed inset-0 bg-black z-[100] hidden flex flex-col items-center justify-center text-gray-800 text-xs select-none" onclick="toggleStealth()">
-        <div class="mb-4 animate-pulse">● Kayıt</div>
-        <p>Çıkmak için dokun</p>
-        <div id="stealth-text" class="mt-4 opacity-10 max-w-xs text-center truncate"></div>
+        <div class="mb-4 animate-pulse text-red-600 font-bold">● REC</div>
+        <p class="text-gray-900">Çıkmak için dokun</p>
+        <div id="stealth-text" class="mt-4 opacity-20 max-w-xs text-center truncate font-mono text-gray-600"></div>
     </div>
 
     <script>
-        // --- Durum Yönetimi ---
         let notes = [];
         let currentFilter = 'all';
         let currentNoteId = null;
@@ -399,26 +380,19 @@
         let isListening = false;
         let currentFont = 'font-hand';
         let currentCat = 'guncel';
+        let noteToDeleteId = null;
 
-        const CATEGORIES = {
-            'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 
-            'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 
-            'kisisel': 'Kişisel', 'diger': 'Diğer'
-        };
+        const CATEGORIES = { 'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 'kisisel': 'Kişisel', 'diger': 'Diğer' };
 
-        // --- Başlangıç ---
         document.addEventListener('DOMContentLoaded', () => {
             window.loadLocalNotes();
             setupVoice();
             lucide.createIcons();
-            
-            // Ayarları form içine doldur
             document.getElementById('gemini-key').value = localStorage.getItem('gemini_api_key') || "";
             document.getElementById('fb-key').value = localStorage.getItem('fb_api_key') || "";
             document.getElementById('fb-app').value = localStorage.getItem('fb_app_id') || "";
         });
 
-        // --- Veri ---
         window.loadLocalNotes = () => {
             const saved = localStorage.getItem('baris_notes');
             if (saved) {
@@ -436,7 +410,6 @@
         };
 
         window.syncNotes = (cloudNotes) => {
-            // Basit birleştirme (Bulut verisini öncelikli al)
             const noteMap = new Map();
             window.localNotes.forEach(n => noteMap.set(n.id, n));
             cloudNotes.forEach(n => noteMap.set(n.id, n));
@@ -444,77 +417,48 @@
             window.saveLocalToDisk();
         };
 
-        // --- Arayüz ---
         function render(data) {
             const grid = document.getElementById('notes-grid');
             const empty = document.getElementById('empty-state');
             grid.innerHTML = '';
-
-            const filtered = data.filter(n => currentFilter === 'all' || n.category === currentFilter)
-                                 .sort((a,b) => (b.updatedAt?.seconds || b.updatedAt) - (a.updatedAt?.seconds || a.updatedAt));
-
-            if (filtered.length === 0) {
-                empty.classList.remove('hidden');
-                return;
-            } else {
-                empty.classList.add('hidden');
-            }
+            const filtered = data.filter(n => currentFilter === 'all' || n.category === currentFilter).sort((a,b) => (b.updatedAt?.seconds || b.updatedAt) - (a.updatedAt?.seconds || a.updatedAt));
+            if (filtered.length === 0) empty.classList.remove('hidden'); else empty.classList.add('hidden');
 
             filtered.forEach(note => {
                 const el = document.createElement('div');
                 const catClass = `cat-${note.category || 'diger'}`;
                 const fontClass = note.font || 'font-hand';
                 const date = new Date((note.updatedAt?.seconds || note.updatedAt / 1000) * 1000).toLocaleDateString('tr-TR');
-
-                el.className = `note-card ${catClass} cursor-pointer flex flex-col h-48 animate-fade-in bg-white`;
+                el.className = `note-card ${catClass} cursor-pointer flex flex-col h-56 animate-fade-in bg-white group`;
                 el.innerHTML = `
-                    <div class="p-4 flex-1 overflow-hidden relative group" onclick="openNote('${note.id}')">
-                        <div class="flex justify-between items-start mb-2">
-                            <h3 class="font-bold text-lg leading-tight line-clamp-2">${note.title || 'Başlıksız'}</h3>
-                            <span class="text-[10px] uppercase font-bold opacity-50 border border-current px-1 rounded">${CATEGORIES[note.category]}</span>
+                    <div class="p-5 flex-1 overflow-hidden relative" onclick="openNote('${note.id}')">
+                        <button onclick="event.stopPropagation(); deleteNoteFromCard('${note.id}')" class="absolute top-2 right-2 text-red-400 bg-white/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 z-20"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <div class="flex justify-between items-start mb-3"><h3 class="font-bold text-lg leading-tight line-clamp-2 pr-6">${note.title || 'Başlıksız'}</h3></div>
+                        <p class="text-sm opacity-90 ${fontClass} line-clamp-6 whitespace-pre-line text-gray-800">${note.content || ''}</p>
+                        <div class="absolute bottom-0 left-0 right-0 p-4 pt-8 bg-gradient-to-t from-white via-white/80 to-transparent flex justify-between items-end">
+                            <span class="text-[10px] uppercase font-bold opacity-60 border border-current px-2 py-0.5 rounded tracking-wide">${CATEGORIES[note.category]}</span><span class="text-xs opacity-50 font-medium">${date}</span>
                         </div>
-                        <p class="text-sm opacity-80 ${fontClass} line-clamp-4 whitespace-pre-line">${note.content || ''}</p>
-                        <span class="absolute bottom-3 right-4 text-xs opacity-40">${date}</span>
                     </div>
                 `;
                 grid.appendChild(el);
             });
+            lucide.createIcons();
         }
 
         function filter(cat) {
             currentFilter = cat;
-            document.querySelectorAll('.cat-btn').forEach(b => {
-                b.classList.remove('bg-gray-800', 'text-white');
-                b.classList.add('bg-white');
-            });
+            document.querySelectorAll('.cat-btn').forEach(b => { b.classList.remove('bg-gray-800', 'text-white'); b.classList.add('bg-white'); });
             const btn = Array.from(document.querySelectorAll('.cat-btn')).find(b => b.innerText === CATEGORIES[cat] || (cat === 'all' && b.innerText === 'Tümü'));
-            if(btn) {
-                btn.classList.add('bg-gray-800', 'text-white');
-                btn.classList.remove('bg-white');
-            }
+            if(btn) { btn.classList.add('bg-gray-800', 'text-white'); btn.classList.remove('bg-white'); }
             render(window.localNotes);
         }
 
         function search() {
             const val = document.getElementById('searchInput').value.toLowerCase();
             const filtered = window.localNotes.filter(n => (n.title+n.content).toLowerCase().includes(val));
-            const grid = document.getElementById('notes-grid');
-            grid.innerHTML = ''; 
-            // Render logic duplicate for search simplicity
-            if(filtered.length === 0) document.getElementById('empty-state').classList.remove('hidden');
-            else {
-                document.getElementById('empty-state').classList.add('hidden');
-                filtered.forEach(note => {
-                    // (Same render logic card creation - simplified for brevity)
-                    const el = document.createElement('div');
-                    el.className = `note-card cat-${note.category} cursor-pointer flex flex-col h-48 bg-white`;
-                    el.innerHTML = `<div class="p-4" onclick="openNote('${note.id}')"><h3 class="font-bold">${note.title}</h3><p class="text-sm mt-2 line-clamp-4">${note.content}</p></div>`;
-                    grid.appendChild(el);
-                });
-            }
+            render(filtered);
         }
 
-        // --- Modal & Editör ---
         function openModal() {
             currentNoteId = null;
             document.getElementById('note-title').value = '';
@@ -535,7 +479,6 @@
             document.getElementById('btn-delete').classList.remove('hidden');
             renderCats(note.category || 'guncel');
             setFont(note.font || 'font-hand');
-            
             document.getElementById('note-modal').classList.remove('hidden');
             setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
         }
@@ -555,7 +498,7 @@
             div.innerHTML = '';
             Object.keys(CATEGORIES).forEach(k => {
                 const btn = document.createElement('button');
-                btn.className = `px-3 py-1 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${k === selected ? 'bg-gray-800 text-white' : 'bg-white text-gray-500'}`;
+                btn.className = `px-3 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${k === selected ? 'bg-gray-800 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`;
                 btn.innerText = CATEGORIES[k];
                 btn.onclick = () => { renderCats(k); };
                 div.appendChild(btn);
@@ -565,42 +508,51 @@
         function setFont(fontClass) {
             currentFont = fontClass;
             const area = document.getElementById('note-content');
-            area.className = area.className.replace(/font-\w+/, fontClass);
+            area.classList.remove('font-hand', 'font-serif', 'font-mono', 'font-sans');
+            area.classList.add(fontClass);
         }
 
         async function saveNote() {
             const title = document.getElementById('note-title').value.trim();
             const content = document.getElementById('note-content').value.trim();
             if (!title && !content) return showToast('Boş not kaydedilemez', 'error');
-
-            const noteData = {
-                id: currentNoteId, // Varsa ID
-                title, content, 
-                category: currentCat,
-                font: currentFont
-            };
-
+            const noteData = { id: currentNoteId, title, content, category: currentCat, font: currentFont };
             await window.saveNoteToStorage(noteData);
             closeModal();
             showToast('Kaydedildi', 'success');
         }
 
-        async function deleteCurrentNote() {
-            if(confirm("Bu notu silmek istiyor musun?")) {
-                await window.deleteNoteFromStorage(currentNoteId);
-                closeModal();
-                showToast('Silindi', 'success');
-            }
+        function openConfirmModal(id) {
+            noteToDeleteId = id;
+            document.getElementById('confirm-modal').classList.remove('hidden');
         }
 
-        // --- Yapay Zeka (Gemini) ---
+        function closeConfirmModal() {
+            noteToDeleteId = null;
+            document.getElementById('confirm-modal').classList.add('hidden');
+        }
+
+        async function performDelete() {
+            if (!noteToDeleteId) return;
+            const idToDelete = noteToDeleteId;
+            // 1. Önce Modalı Kapat (Hız için)
+            closeConfirmModal();
+            if (currentNoteId === idToDelete) closeModal();
+            
+            // 2. Sonra Sil
+            await window.deleteNoteFromStorage(idToDelete);
+            showToast('Not silindi', 'success');
+        }
+
+        function deleteCurrentNote() { if (currentNoteId) openConfirmModal(currentNoteId); }
+        function deleteNoteFromCard(id) { openConfirmModal(id); }
+
         function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
 
         async function runAI(action) {
-            toggleAiMenu(); // Menüyü kapat
+            toggleAiMenu();
             const content = document.getElementById('note-content').value;
             if(!content) return showToast("Önce bir şeyler yazmalısın!", "error");
-
             const apiKey = localStorage.getItem('gemini_api_key');
             if(!apiKey) return showToast("Ayarlardan API Anahtarı girmelisin!", "error");
 
@@ -608,54 +560,44 @@
             document.getElementById('ai-loading').classList.add('flex');
 
             let prompt = "";
-            if (action === 'fix') prompt = `Bu metni Türkçe imla kurallarına göre düzelt ve daha akıcı hale getir:\n\n${content}`;
-            else if (action === 'summarize') prompt = `Bu metni Türkçe olarak kısa maddeler halinde özetle:\n\n${content}`;
-            else if (action === 'expand') prompt = `Bu metindeki ana fikri koruyarak daha detaylı, edebi ve zengin bir şekilde genişlet (Türkçe):\n\n${content}`;
-            else if (action === 'whatsapp') {
-                prompt = `Bu metni WhatsApp durumu (max 700 karakter) için kısalt, duygusuna uygun emojiler ekle ve arka plan rengi seç (1-5 arası sayı). Cevap formatı: METİN|||RENK_NO (1:Yeşil, 2:Kırmızı, 3:Mavi, 4:Mor, 5:Siyah). Metin: ${content}`;
-            }
+            if (action === 'fix') prompt = `Bu metni Türkçe imla kurallarına göre düzelt:\n\n${content}`;
+            else if (action === 'summarize') prompt = `Bu metni Türkçe özetle:\n\n${content}`;
+            else if (action === 'expand') prompt = `Bu metni genişlet:\n\n${content}`;
+            else if (action === 'continue') prompt = `Devamını getir (2-3 cümle):\n\n${content}`;
+            else if (action === 'formal') prompt = `Resmi dille yaz:\n\n${content}`;
+            else if (action === 'keypoints') prompt = `Ana fikirleri çıkar:\n\n${content}`;
+            else if (action === 'whatsapp') prompt = `WhatsApp durumu için kısalt, emoji ekle, renk seç (1-5). Format: METİN|||RENK_NO. Metin: ${content}`;
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
-                
                 if(data.error) throw new Error(data.error.message);
-
                 const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 if (action === 'whatsapp') {
-                    // WhatsApp özel işleme
                     const parts = result.split('|||');
                     document.getElementById('wp-text').value = parts[0].trim();
                     if(parts[1]) {
                         const colors = ['#25D366', '#FF5252', '#448AFF', '#7C4DFF', '#212121'];
                         setWpColor(colors[parseInt(parts[1])-1] || colors[0]);
                     }
-                    closeModal(); // Not modalını kapat
-                    document.getElementById('wp-modal').classList.remove('hidden'); // WP modalını aç
+                    closeModal();
+                    document.getElementById('wp-modal').classList.remove('hidden');
                 } else {
-                    // Normal not güncelleme
-                    document.getElementById('note-content').value = result;
+                    if (action === 'continue') document.getElementById('note-content').value += " " + result;
+                    else document.getElementById('note-content').value = result;
                 }
-                
-                showToast("Yapay Zeka tamamladı!", "success");
-
-            } catch (error) {
-                console.error(error);
-                showToast("AI Hatası: " + error.message, "error");
-            } finally {
+                showToast("Tamamlandı!", "success");
+            } catch (error) { console.error(error); showToast("Hata: " + error.message, "error"); } 
+            finally { 
                 document.getElementById('ai-loading').classList.add('hidden');
                 document.getElementById('ai-loading').classList.remove('flex');
             }
         }
 
-        // --- WhatsApp Studio ---
         function openWhatsAppMode() {
-            // Eğer not modalı açıksa oradaki metni al
             const currentContent = document.getElementById('note-content').value;
             document.getElementById('wp-text').value = currentContent;
             checkWpLimit();
@@ -670,19 +612,12 @@
         }
         function saveWpToNote() {
             const text = document.getElementById('wp-text').value;
-            if(!currentNoteId) {
-                // Yeni not
-                window.saveNoteToStorage({title: 'Durum Yazısı', content: text, category: 'diger', font: 'font-hand'});
-            } else {
-                // Mevcut notu güncelle
-                document.getElementById('note-content').value = text;
-                saveNote();
-            }
+            if(!currentNoteId) window.saveNoteToStorage({title: 'Durum Yazısı', content: text, category: 'diger', font: 'font-hand'});
+            else { document.getElementById('note-content').value = text; saveNote(); }
             closeWp();
             showToast("Kaydedildi", "success");
         }
 
-        // --- Ses ---
         function setupVoice() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -690,16 +625,13 @@
                 recognition.lang = 'tr-TR';
                 recognition.continuous = true;
                 recognition.interimResults = true;
-                
                 recognition.onresult = (e) => {
                     let final = '';
                     for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
                     if(final) {
                         const el = document.getElementById('note-content');
                         el.value += (el.value ? ' ' : '') + final;
-                        if(isListening && document.body.classList.contains('stealth-mode')) {
-                            document.getElementById('stealth-text').innerText = final;
-                        }
+                        if(isListening && document.body.classList.contains('stealth-mode')) document.getElementById('stealth-text').innerText = final;
                     }
                 };
                 recognition.onend = () => { if(isListening) try{recognition.start()}catch{} else updateMicState(false); };
@@ -709,30 +641,23 @@
             if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
             isListening = !isListening;
             updateMicState(isListening);
-            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} }
-            else { try{ recognition.stop(); }catch{} }
+            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} } else { try{ recognition.stop(); }catch{} }
         }
         function updateMicState(on) {
             const btn = document.getElementById('mic-btn');
-            if(on) {
-                btn.classList.add('mic-active', 'bg-red-100', 'text-red-600');
-                btn.innerHTML = '<i data-lucide="mic-off"></i>';
-            } else {
-                btn.classList.remove('mic-active', 'bg-red-100', 'text-red-600');
-                btn.innerHTML = '<i data-lucide="mic"></i>';
-            }
+            if(on) { btn.classList.add('mic-active', 'bg-red-100', 'text-red-600'); btn.innerHTML = '<i data-lucide="mic-off"></i>'; }
+            else { btn.classList.remove('mic-active', 'bg-red-100', 'text-red-600'); btn.innerHTML = '<i data-lucide="mic"></i>'; }
             lucide.createIcons();
         }
 
-        // --- Ayarlar & Yedek ---
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
         function saveSettings() {
             localStorage.setItem('gemini_api_key', document.getElementById('gemini-key').value.trim());
             localStorage.setItem('fb_api_key', document.getElementById('fb-key').value.trim());
             localStorage.setItem('fb_app_id', document.getElementById('fb-app').value.trim());
             toggleSettings();
-            showToast("Ayarlar kaydedildi, sayfayı yenileyin", "success");
-            setTimeout(() => location.reload(), 1000);
+            showToast("Ayarlar kaydedildi", "success");
+            setTimeout(() => location.reload(), 500);
         }
         function downloadBackup() {
             const blob = new Blob([JSON.stringify(window.localNotes, null, 2)], {type : 'application/json'});
@@ -741,15 +666,10 @@
             a.download = `yedek-${Date.now()}.json`;
             a.click();
         }
-
         function toggleStealth() {
             document.body.classList.toggle('stealth-mode');
-            if(document.body.classList.contains('stealth-mode')) {
-                if(!isListening) toggleVoice();
-            }
+            if(document.body.classList.contains('stealth-mode')) { if(!isListening) toggleVoice(); }
         }
-
-        // Toast
         function showToast(msg, type) {
             const div = document.createElement('div');
             div.className = `px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold animate-fade-in ${type === 'error' ? 'bg-red-500' : 'bg-gray-800'}`;
