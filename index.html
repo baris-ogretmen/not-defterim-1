@@ -8,8 +8,8 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Caveat:wght@500;600;700&family=Kalam:wght@300;400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <!-- Google Fonts: Çeşitli yazı stilleri için -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Kalam:wght@300;400;700&family=Merriweather:wght@300;400;700&family=Courier+Prime:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
     
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -23,1096 +23,739 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global değişkenler
-        window.firebaseModules = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp };
-        
-        // Kayıtlı ayarları kontrol et
+        // Global Firebase Nesneleri
+        window.firebaseData = { db: null, auth: null, user: null, active: false };
+
         const savedApiKey = localStorage.getItem('fb_api_key');
         const savedAppId = localStorage.getItem('fb_app_id');
-        const defaultProjectId = "sekilli-totem-481514-c5";
-        
-        // Yapılandırma
+        const defaultProject = "sekilli-totem-481514-c5";
+
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { 
-            apiKey: savedApiKey || "BURAYA_FIREBASE_API_KEY", 
-            authDomain: `${defaultProjectId}.firebaseapp.com`,
-            projectId: defaultProjectId,
-            storageBucket: `${defaultProjectId}.firebasestorage.app`,
+            apiKey: savedApiKey || "DEMO_KEY", 
+            authDomain: `${defaultProject}.firebaseapp.com`,
+            projectId: defaultProject,
+            storageBucket: `${defaultProject}.firebasestorage.app`,
             messagingSenderId: "519295049418",
-            appId: savedAppId || "BURAYA_APP_ID"
+            appId: savedAppId || "DEMO_APP_ID"
         };
 
-        let app, auth, db;
-        window.isFirebaseActive = false; // Firebase durumunu takip et
-
-        // Firebase başlatma fonksiyonu
-        window.initFirebase = async () => {
-            // Önce yerel verileri yükle (Offline Mod)
+        async function initApp() {
+            // Önce yerel verileri yükle (Offline Öncelikli)
             window.loadLocalNotes();
 
-            try {
-                if (firebaseConfig.apiKey.includes("BURAYA") || firebaseConfig.apiKey === "demo") {
-                    console.log("Firebase ayarı yok, yerel modda çalışılıyor.");
-                    return;
-                }
-
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                
-                // Auth başlat
-                await initAuth();
-
-                onAuthStateChanged(auth, (user) => {
-                    window.currentUser = user;
-                    if (user) {
-                        window.isFirebaseActive = true;
-                        initNotesListener(user.uid);
-                        document.getElementById('cloud-status').classList.remove('text-gray-400');
-                        document.getElementById('cloud-status').classList.add('text-green-500');
-                        showToast("Bulut bağlantısı aktif.", "success");
-                    }
-                });
-
-            } catch (e) {
-                console.error("Firebase Hatası:", e);
-                showToast("Bulut bağlanamadı, yerel mod aktif.", "info");
+            if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
+                console.log("Firebase API Key eksik, yerel modda devam ediliyor.");
+                return;
             }
-        };
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        let unsubscribeNotes = null;
-
-        const initAuth = async () => {
-            if (!auth) return;
             try {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                
+                window.firebaseData.auth = auth;
+                window.firebaseData.db = db;
+
+                // Auth Başlat
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
-            } catch (error) { console.error("Auth Error:", error); }
-        };
 
-        function initNotesListener(userId) {
-            if (!db) return;
-            if (unsubscribeNotes) unsubscribeNotes();
-            const notesRef = collection(db, 'artifacts', appId, 'users', userId, 'notes');
-            
-            document.getElementById('loading-state').classList.remove('hidden');
+                onAuthStateChanged(auth, (user) => {
+                    window.firebaseData.user = user;
+                    if (user) {
+                        window.firebaseData.active = true;
+                        document.getElementById('cloud-icon').classList.replace('text-gray-300', 'text-green-500');
+                        initLiveListener(user.uid);
+                    }
+                });
+            } catch (e) {
+                console.error("Firebase Hatası:", e);
+            }
+        }
 
-            unsubscribeNotes = onSnapshot(notesRef, (snapshot) => {
-                const notes = [];
-                snapshot.forEach((doc) => notes.push({ id: doc.id, ...doc.data() }));
-                
-                // Firebase'den gelen veriyi yerelle birleştir/güncelle
-                window.syncNotes(notes);
-                
-                document.getElementById('loading-state').classList.add('hidden');
-            }, (error) => {
-                console.error("Veri hatası:", error);
-                // Hata olsa bile yerel verilerle devam et
-                document.getElementById('loading-state').classList.add('hidden');
+        let unsubscribe = null;
+        function initLiveListener(uid) {
+            if (unsubscribe) unsubscribe();
+            const q = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', uid, 'notes');
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                const cloudNotes = [];
+                snapshot.forEach(d => cloudNotes.push({ id: d.id, ...d.data() }));
+                // Buluttan gelen veriyle yereli birleştir
+                window.syncNotes(cloudNotes);
+            }, (err) => {
+                console.error("Veri okuma hatası:", err);
             });
         }
 
-        // --- HİBRİT VERİ YÖNETİMİ ---
-        window.localNotes = [];
-
-        window.loadLocalNotes = () => {
-            const saved = localStorage.getItem('baris_notes_backup');
-            if (saved) {
-                window.localNotes = JSON.parse(saved);
-                window.renderNotes(window.localNotes);
-            }
-        };
-
-        window.saveLocalNotes = () => {
-            localStorage.setItem('baris_notes_backup', JSON.stringify(window.localNotes));
-            window.renderNotes(window.localNotes);
-        };
-
-        window.syncNotes = (cloudNotes) => {
-            // Basit senkronizasyon: Bulut her zaman daha güncel kabul edilir (çakışma kontrolü yok)
-            window.localNotes = cloudNotes;
-            window.saveLocalNotes();
-        };
-
-        // CRUD İşlemleri (Hem Yerel Hem Bulut)
-        window.addNoteToApp = async (data) => {
-            const newNote = { ...data, id: 'local_' + Date.now(), createdAt: { seconds: Date.now() / 1000 }, updatedAt: { seconds: Date.now() / 1000 } };
-            
-            // 1. Yerele Ekle
-            window.localNotes.push(newNote);
-            window.saveLocalNotes();
-
-            // 2. Buluta Ekle (Varsa)
-            if (window.isFirebaseActive && window.currentUser) {
-                try {
-                    // ID'siz gönder, Firebase ID versin (Sonra update ile eşleştirmek daha doğru olur ama basitlik için böyle bırakıyoruz)
-                    await addDoc(collection(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-                } catch(e) { console.error("Buluta eklenemedi", e); }
-            }
-        };
-
-        window.deleteNoteApp = async (id) => {
-            // 1. Yerelden Sil
-            window.localNotes = window.localNotes.filter(n => n.id !== id);
-            window.saveLocalNotes();
-
-            // 2. Buluttan Sil (Eğer ID local_ ile başlamıyorsa, yani bulut ID'siyse)
-            if (window.isFirebaseActive && window.currentUser && !id.startsWith('local_')) {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id));
-                } catch(e) { console.error("Buluttan silinemedi", e); }
-            }
-        };
-
-        window.updateNoteApp = async (id, data) => {
-            // 1. Yerelde Güncelle
-            const idx = window.localNotes.findIndex(n => n.id === id);
-            if (idx > -1) {
-                window.localNotes[idx] = { ...window.localNotes[idx], ...data, updatedAt: { seconds: Date.now() / 1000 } };
-                window.saveLocalNotes();
-            }
-
-            // 2. Bulutta Güncelle
-            if (window.isFirebaseActive && window.currentUser && !id.startsWith('local_')) {
-                try {
-                    await updateDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id), { ...data, updatedAt: serverTimestamp() });
-                } catch(e) { console.error("Bulut güncellenemedi", e); }
-            }
-        };
-
         // Başlat
-        window.initFirebase();
+        initApp();
+
+        // CRUD Global Fonksiyonlar
+        window.saveNoteToStorage = async (note) => {
+            // 1. Yerele Kaydet
+            const localNote = { ...note, id: note.id || 'loc_' + Date.now(), updatedAt: Date.now() };
+            const existingIdx = window.localNotes.findIndex(n => n.id === note.id);
+            
+            if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
+            else window.localNotes.push(localNote);
+            
+            window.saveLocalToDisk();
+
+            // 2. Buluta Kaydet (Varsa)
+            if (window.firebaseData.active) {
+                try {
+                    const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
+                    // Eğer ID "loc_" ile başlıyorsa yeni doküman, değilse güncelleme
+                    if (note.id && !note.id.startsWith('loc_')) {
+                        await updateDoc(doc(col, note.id), { ...note, updatedAt: serverTimestamp() });
+                    } else {
+                        await addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                    }
+                } catch(e) { console.error("Bulut kaydı hatası:", e); }
+            }
+        };
+
+        window.deleteNoteFromStorage = async (id) => {
+            window.localNotes = window.localNotes.filter(n => n.id !== id);
+            window.saveLocalToDisk();
+
+            if (window.firebaseData.active && !id.startsWith('loc_')) {
+                try {
+                    await deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
+                } catch(e) { console.error("Bulut silme hatası:", e); }
+            }
+        };
+
     </script>
 
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
-            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
-            background-size: 24px 24px;
+            background-color: #f8fafc; /* Daha açık, temiz arka plan */
+            background-image: 
+                linear-gradient(rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+            background-size: 40px 40px;
         }
 
-        /* Post-it Stilleri */
-        .post-it {
-            font-family: 'Kalam', cursive;
-            transition: all 0.3s ease;
+        /* Font Aileleri */
+        .font-hand { font-family: 'Kalam', cursive; }
+        .font-serif { font-family: 'Merriweather', serif; }
+        .font-mono { font-family: 'Courier Prime', monospace; }
+        .font-sans { font-family: 'Inter', sans-serif; }
+
+        /* Kart Stilleri */
+        .note-card {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             position: relative;
+            border-radius: 16px;
             overflow: hidden;
-            border-radius: 8px;
-            border: 1px solid rgba(0,0,0,0.05);
+            border: 1px solid rgba(0,0,0,0.03);
         }
-        .post-it:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        .note-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
             z-index: 10;
         }
-        
-        /* Renk Temaları */
-        .theme-tarih { --bg-h: #fca5a5; --bg-b: #fef2f2; --text: #7f1d1d; }
-        .theme-dini { --bg-h: #86efac; --bg-b: #f0fdf4; --text: #14532d; }
-        .theme-siyasi { --bg-h: #93c5fd; --bg-b: #eff6ff; --text: #1e3a8a; }
-        .theme-egitim { --bg-h: #fcd34d; --bg-b: #fffbeb; --text: #78350f; }
-        .theme-guncel { --bg-h: #67e8f9; --bg-b: #ecfeff; --text: #155e75; }
-        .theme-kisisel { --bg-h: #f0abfc; --bg-b: #fdf4ff; --text: #701a75; }
-        .theme-is { --bg-h: #cbd5e1; --bg-b: #f8fafc; --text: #334155; }
-        .theme-diger { --bg-h: #d6d3d1; --bg-b: #fafaf9; --text: #44403c; }
 
-        .post-it {
-            background-color: var(--bg-b);
-            color: var(--text);
-        }
-        .post-it .card-header {
-            background-color: var(--bg-h);
-            color: var(--text);
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-        }
-        
-        .section-title {
-            display: inline-block;
-            padding: 0.5rem 1.5rem;
-            border-radius: 999px;
-            font-weight: 800;
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .title-tarih { background: #fca5a5; color: #7f1d1d; }
-        .title-dini { background: #86efac; color: #14532d; }
-        .title-siyasi { background: #93c5fd; color: #1e3a8a; }
-        .title-egitim { background: #fcd34d; color: #78350f; }
-        .title-guncel { background: #67e8f9; color: #155e75; }
-        .title-kisisel { background: #f0abfc; color: #701a75; }
-        .title-is { background: #cbd5e1; color: #334155; }
-        .title-diger { background: #d6d3d1; color: #44403c; }
+        /* Kategori Renkleri (Hafif ve Modern) */
+        .cat-tarih { background: #fee2e2; color: #7f1d1d; border-top: 6px solid #ef4444; }
+        .cat-dini { background: #dcfce7; color: #14532d; border-top: 6px solid #22c55e; }
+        .cat-siyasi { background: #dbeafe; color: #1e3a8a; border-top: 6px solid #3b82f6; }
+        .cat-egitim { background: #fef3c7; color: #78350f; border-top: 6px solid #f59e0b; }
+        .cat-guncel { background: #cffafe; color: #155e75; border-top: 6px solid #06b6d4; }
+        .cat-kisisel { background: #fae8ff; color: #701a75; border-top: 6px solid #d946ef; }
+        .cat-is { background: #f1f5f9; color: #334155; border-top: 6px solid #64748b; }
+        .cat-diger { background: #f3f4f6; color: #1f2937; border-top: 6px solid #9ca3af; }
 
-        .tape {
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%) rotate(-2deg);
-            width: 80px;
-            height: 30px;
-            background-color: rgba(255,255,255,0.4);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            backdrop-filter: blur(2px);
-            opacity: 0.7;
-            z-index: 5;
-        }
-
-        body.stealth-mode {
-            background: black !important;
-            background-image: none !important;
-        }
-        body.stealth-mode header,
-        body.stealth-mode main {
-            opacity: 0;
-            pointer-events: none;
-        }
-        body.stealth-mode #stealth-overlay {
+        /* FAB (Yüzen Buton) */
+        .fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #4f46e5;
+            color: white;
+            box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.5);
             display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+            z-index: 40;
+        }
+        .fab:active { transform: scale(0.90); }
+
+        /* Modal Toolbar */
+        .editor-toolbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(5px);
+            border-top: 1px solid #e5e7eb;
         }
 
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-        .mic-active { animation: pulse-red 2s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
-        
-        .loader { border: 3px solid #f3f3f3; border-radius: 50%; border-top: 3px solid #6366f1; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Gizli Mod */
+        body.stealth-mode { background: #000 !important; overflow: hidden; }
+        body.stealth-mode header, body.stealth-mode main, body.stealth-mode .fab { opacity: 0; pointer-events: none; }
+        body.stealth-mode #stealth-overlay { display: flex; }
 
-        /* WhatsApp Stüdyo Stilleri */
-        .wp-bg-1 { background: #25D366; } /* WP Green */
-        .wp-bg-2 { background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%); }
-        .wp-bg-3 { background: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 100%); }
-        .wp-bg-4 { background: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%); }
-        .wp-bg-5 { background: linear-gradient(120deg, #f6d365 0%, #fda085 100%); }
-        .wp-bg-6 { background: linear-gradient(to right, #43e97b 0%, #38f9d7 100%); }
-        .wp-bg-7 { background: linear-gradient(to top, #5f72bd 0%, #9b23ea 100%); }
-        .wp-bg-8 { background: #2b2b2b; } /* Dark */
+        /* Animasyonlar */
+        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+        .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
+        .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden text-gray-800">
+<body class="h-screen flex flex-col text-gray-800">
 
     <!-- Header -->
-    <header class="bg-white/90 backdrop-blur-md shadow-sm z-20 flex-none border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
-            <div class="flex items-center space-x-2">
-                <div class="bg-gradient-to-tr from-indigo-600 to-purple-600 text-white p-2 rounded-lg shadow-md">
-                    <i data-lucide="notebook-pen" class="w-6 h-6"></i>
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <div class="p-2 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
+                    <i data-lucide="book-open-check" class="w-6 h-6"></i>
                 </div>
-                <div>
-                    <h1 class="text-xl md:text-2xl font-caveat font-bold text-gray-800 leading-none">Barış'ın Notları</h1>
-                </div>
+                <h1 class="text-xl font-bold tracking-tight text-gray-800">Barış'ın Defteri</h1>
             </div>
             
-            <div class="flex items-center space-x-2">
-                <!-- Bulut Durumu İkonu -->
-                <i data-lucide="cloud" id="cloud-status" class="w-5 h-5 text-gray-300 transition-colors" title="Bulut Bağlantısı"></i>
-
-                <!-- Ayarlar -->
-                <button onclick="toggleSettingsModal()" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors relative" title="Ayarlar">
-                    <i data-lucide="settings" class="w-5 h-5"></i>
-                </button>
-
-                <!-- WhatsApp Stüdyosu (Ana Menü) -->
-                <button onclick="openWhatsAppMode()" class="p-2 rounded-full bg-green-100 text-green-600 hover:bg-green-200 transition-colors" title="WhatsApp Durum Stüdyosu">
-                    <i data-lucide="smartphone" class="w-5 h-5"></i>
-                </button>
-
-                <!-- Hızlı Ses Kaydı -->
-                 <button onclick="startQuickVoiceNote()" class="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors" title="Hızlı Ses Kaydı (Diğer)">
-                    <i data-lucide="mic" class="w-5 h-5"></i>
-                </button>
-
-                <!-- Gizli Mod -->
-                <button onclick="toggleStealthMode()" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors" title="Gizli Ses Kaydı Modu">
-                    <i data-lucide="eye-off" class="w-5 h-5"></i>
-                </button>
-
-                <!-- Yeni Not Butonu -->
-                <button onclick="toggleNewNoteModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full shadow-lg transition transform active:scale-95 flex items-center space-x-2 text-sm font-medium">
-                    <i data-lucide="plus" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Not Ekle</span>
-                </button>
+            <div class="flex items-center gap-1">
+                <i data-lucide="cloud" id="cloud-icon" class="w-5 h-5 text-gray-300 mr-2 transition-colors"></i>
+                <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                <button onclick="openWhatsAppMode()" class="p-2 rounded-full hover:bg-green-50 text-green-600"><i data-lucide="smartphone" class="w-5 h-5"></i></button>
+                <button onclick="toggleStealth()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="eye-off" class="w-5 h-5"></i></button>
             </div>
         </div>
 
-        <!-- Filtreler -->
-        <div class="border-t border-gray-100 overflow-x-auto">
-            <div class="max-w-7xl mx-auto px-4 py-2 flex space-x-2 no-scrollbar">
-                <button onclick="filterNotes('all')" class="filter-btn active bg-gray-800 text-white px-4 py-1 rounded-full text-xs font-bold shadow-sm transition-all">TÜMÜ</button>
-                <button onclick="filterNotes('tarih')" class="filter-btn bg-white border border-red-200 text-red-800 hover:bg-red-50 px-4 py-1 rounded-full text-xs font-bold transition-all">TARİH</button>
-                <button onclick="filterNotes('dini')" class="filter-btn bg-white border border-green-200 text-green-800 hover:bg-green-50 px-4 py-1 rounded-full text-xs font-bold transition-all">DİNİ</button>
-                <button onclick="filterNotes('siyasi')" class="filter-btn bg-white border border-blue-200 text-blue-800 hover:bg-blue-50 px-4 py-1 rounded-full text-xs font-bold transition-all">SİYASİ</button>
-                <button onclick="filterNotes('egitim')" class="filter-btn bg-white border border-yellow-200 text-yellow-800 hover:bg-yellow-50 px-4 py-1 rounded-full text-xs font-bold transition-all">EĞİTİM</button>
-                <button onclick="filterNotes('guncel')" class="filter-btn bg-white border border-cyan-200 text-cyan-800 hover:bg-cyan-50 px-4 py-1 rounded-full text-xs font-bold transition-all">GÜNCEL</button>
-                <button onclick="filterNotes('is')" class="filter-btn bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 px-4 py-1 rounded-full text-xs font-bold transition-all">İŞ</button>
-                <button onclick="filterNotes('kisisel')" class="filter-btn bg-white border border-fuchsia-200 text-fuchsia-800 hover:bg-fuchsia-50 px-4 py-1 rounded-full text-xs font-bold transition-all">KİŞİSEL</button>
-                <button onclick="filterNotes('diger')" class="filter-btn bg-white border border-gray-200 text-gray-800 hover:bg-gray-50 px-4 py-1 rounded-full text-xs font-bold transition-all">DİĞER</button>
+        <!-- Kategoriler -->
+        <div class="overflow-x-auto py-2 px-4 no-scrollbar">
+            <div class="flex gap-2 max-w-5xl mx-auto min-w-max">
+                <button onclick="filter('all')" class="cat-btn active bg-gray-800 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-md transition-all">Tümü</button>
+                <button onclick="filter('tarih')" class="cat-btn bg-white border text-red-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-red-50 transition-all">Tarih</button>
+                <button onclick="filter('dini')" class="cat-btn bg-white border text-green-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-green-50 transition-all">Dini</button>
+                <button onclick="filter('siyasi')" class="cat-btn bg-white border text-blue-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-blue-50 transition-all">Siyasi</button>
+                <button onclick="filter('egitim')" class="cat-btn bg-white border text-yellow-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-yellow-50 transition-all">Eğitim</button>
+                <button onclick="filter('guncel')" class="cat-btn bg-white border text-cyan-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-cyan-50 transition-all">Güncel</button>
+                <button onclick="filter('is')" class="cat-btn bg-white border text-slate-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-slate-50 transition-all">İş</button>
+                <button onclick="filter('diger')" class="cat-btn bg-white border text-gray-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-gray-50 transition-all">Diğer</button>
             </div>
         </div>
     </header>
 
-    <!-- Ana İçerik -->
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6 relative">
-        
-        <!-- Arama -->
-        <div class="max-w-xl mx-auto mb-6 relative group z-10">
-            <i data-lucide="search" class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 group-hover:text-indigo-500 transition-colors"></i>
-            <input type="text" id="searchInput" onkeyup="searchNotes()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-300 focus:border-indigo-500 transition-all outline-none">
-        </div>
+    <!-- Ana Alan -->
+    <main class="flex-1 overflow-y-auto p-4 pb-24">
+        <div class="max-w-5xl mx-auto space-y-6">
+            <!-- Arama -->
+            <div class="relative group">
+                <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                <input type="text" id="searchInput" onkeyup="search()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
+            </div>
 
-        <!-- Durum Göstergeleri -->
-        <div id="loading-state" class="flex flex-col items-center justify-center py-20 hidden">
-            <div class="loader mb-4"></div>
-            <p class="text-gray-500 text-sm">Notlarınız getiriliyor...</p>
+            <!-- Liste -->
+            <div id="notes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            
+            <div id="empty-state" class="hidden text-center py-20 opacity-50">
+                <i data-lucide="feather" class="w-16 h-16 mx-auto mb-4 text-gray-300"></i>
+                <p class="text-xl font-hand">Henüz not yok, hemen bir şeyler karala!</p>
+            </div>
         </div>
-
-        <!-- Notlar Alanı -->
-        <div id="notes-container" class="max-w-7xl mx-auto pb-20 space-y-8"></div>
     </main>
 
-    <!-- Gizli Mod Overlay -->
-    <div id="stealth-overlay" class="fixed inset-0 bg-black z-[100] hidden flex-col items-center justify-center select-none">
-        <div class="text-gray-900 text-xs font-mono absolute top-10">Kayıt Sürüyor...</div>
-        <button onclick="toggleStealthMode()" class="w-48 h-48 rounded-full bg-transparent border-0 outline-none"></button>
-        <div class="absolute bottom-10 w-full px-8 text-center">
-            <p class="text-gray-800 text-xs mb-2">Çıkmak için ekrana dokun</p>
-            <div id="stealth-transcript" class="text-gray-900 text-xs font-mono opacity-20 h-10 overflow-hidden"></div>
-        </div>
-    </div>
+    <!-- FAB (Ekleme Butonu) -->
+    <button onclick="openModal()" class="fab">
+        <i data-lucide="plus" class="w-8 h-8"></i>
+    </button>
 
-    <!-- SİLME ONAY KUTUSU -->
-    <div id="confirm-modal" class="fixed inset-0 z-[80] hidden">
-        <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onclick="closeConfirmModal()"></div>
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center animate-fade-in">
-            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
-                <i data-lucide="trash-2" class="w-6 h-6"></i>
-            </div>
-            <h3 class="text-lg font-bold text-gray-800 mb-2">Bu Notu Sil?</h3>
-            <p class="text-sm text-gray-500 mb-6">Bu işlem geri alınamaz. Devam etmek istiyor musunuz?</p>
-            <div class="flex space-x-3 justify-center">
-                <button onclick="closeConfirmModal()" class="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Vazgeç</button>
-                <button onclick="performDelete()" class="px-5 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-lg transition-transform active:scale-95">Evet, Sil</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- WHATSAPP STATUS STUDIO MODAL -->
-    <div id="whatsapp-modal" class="fixed inset-0 z-[90] hidden bg-black/95 flex items-center justify-center">
-        <div class="relative w-full h-full md:max-w-md md:h-[90vh] md:rounded-3xl overflow-hidden flex flex-col bg-gray-900 shadow-2xl">
-            <!-- Header -->
-            <div class="absolute top-0 left-0 w-full p-4 z-20 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent">
-                <button onclick="closeWhatsAppMode()" class="text-white p-2 rounded-full hover:bg-white/10">
-                    <i data-lucide="x" class="w-6 h-6"></i>
-                </button>
-                <div class="text-white text-sm font-medium bg-black/30 px-3 py-1 rounded-full backdrop-blur-md" id="char-counter">
-                    0/700
-                </div>
-            </div>
-
-            <!-- Preview Area -->
-            <div id="wp-preview" class="flex-1 flex items-center justify-center p-8 wp-bg-1 transition-all duration-500 relative">
-                <textarea id="wp-text" class="w-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] placeholder-white/50 focus:ring-0 resize-none overflow-hidden" rows="10" placeholder="Bir durum yazın..." oninput="updateCharCount()"></textarea>
-            </div>
-
-            <!-- Controls (GÜNCELLENMİŞ) -->
-            <div class="bg-gray-900 p-4 space-y-3 z-30 flex-none border-t border-gray-800">
-                <!-- Color Picker -->
-                <div class="flex space-x-3 overflow-x-auto pb-2 no-scrollbar justify-center">
-                    <button onclick="setWpBg('wp-bg-1')" class="w-8 h-8 rounded-full wp-bg-1 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <button onclick="setWpBg('wp-bg-7')" class="w-8 h-8 rounded-full wp-bg-7 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <button onclick="setWpBg('wp-bg-2')" class="w-8 h-8 rounded-full wp-bg-2 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <button onclick="setWpBg('wp-bg-3')" class="w-8 h-8 rounded-full wp-bg-3 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <button onclick="setWpBg('wp-bg-5')" class="w-8 h-8 rounded-full wp-bg-5 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <button onclick="setWpBg('wp-bg-8')" class="w-8 h-8 rounded-full wp-bg-8 border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                </div>
-
-                <!-- Actions -->
-                <div class="space-y-3">
-                    <button onclick="useAI('whatsapp')" class="w-full flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl font-medium text-sm transition-colors border border-gray-700">
-                        <i data-lucide="sparkles" class="w-4 h-4 mr-2 text-indigo-400"></i> AI ile Sığdır
-                    </button>
-                    
-                    <div class="grid grid-cols-2 gap-3">
-                        <button onclick="copyWpText()" class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-bold transition-colors border border-gray-700">
-                            <i data-lucide="copy" class="w-5 h-5 mr-2"></i> Kopyala
-                        </button>
-                        <button onclick="saveWhatsAppStatus()" class="flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all transform active:scale-95">
-                            <i data-lucide="save" class="w-5 h-5 mr-2"></i> Notlara Kaydet
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Ayarlar Modalı (GÜNCELLENDİ) -->
-    <div id="settings-modal" class="fixed inset-0 z-[60] hidden">
-        <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onclick="toggleSettingsModal()"></div>
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="settings" class="w-5 h-5 mr-2 text-indigo-600"></i> Ayarlar</h2>
-            
-            <!-- Yedekleme Alanı (YENİ) -->
-            <div class="mb-6 p-4 bg-green-50 rounded-xl border border-green-200">
-                <h3 class="text-sm font-bold text-green-700 mb-2 flex items-center"><i data-lucide="archive" class="w-4 h-4 mr-1"></i> Veri Yedekleme</h3>
-                <p class="text-xs text-gray-500 mb-3">Notlarınızı kaybetmemek için düzenli yedek alın.</p>
-                
-                <div class="flex gap-2">
-                    <button onclick="exportData()" class="flex-1 flex items-center justify-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
-                        <i data-lucide="download" class="w-4 h-4 mr-2"></i> Yedeği İndir
-                    </button>
-                    <button onclick="document.getElementById('import-file').click()" class="flex-1 flex items-center justify-center px-3 py-2 bg-white border border-green-600 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold shadow-sm transition-colors">
-                        <i data-lucide="upload" class="w-4 h-4 mr-2"></i> Yedeği Yükle
-                    </button>
-                    <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(this)">
-                </div>
-            </div>
-
-            <!-- Firebase Ayarları -->
-            <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="database" class="w-4 h-4 mr-1"></i> Veritabanı Bağlantısı (Opsiyonel)</h3>
-                <p class="text-xs text-gray-500 mb-3">Bulut yedekleme için Firebase API Key ve App ID giriniz.</p>
-                
-                <div class="space-y-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Firebase API Key</label>
-                        <input type="password" id="fb-api-key-input" placeholder="AIzaSy..." class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">Firebase App ID</label>
-                        <input type="text" id="fb-app-id-input" placeholder="1:519295049418:web:..." class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Gemini AI Ayarları -->
-            <div class="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-                <h3 class="text-sm font-bold text-indigo-700 mb-2 flex items-center"><i data-lucide="sparkles" class="w-4 h-4 mr-1"></i> Yapay Zeka (Gemini)</h3>
-                <div class="mb-2">
-                    <label class="block text-xs font-semibold text-indigo-600 mb-1">Gemini API Anahtarı</label>
-                    <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs bg-white">
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-2">
-                <button onclick="toggleSettingsModal()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Kapat</button>
-                <button onclick="saveAllSettings()" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-md">Ayarları Kaydet</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Not Ekleme/Düzenleme Modalı -->
+    <!-- NOT DÜZENLEME MODALI -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
-        <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
-        <div class="absolute inset-x-0 bottom-0 md:top-10 md:bottom-auto md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl bg-white rounded-t-2xl md:rounded-2xl shadow-2xl transform transition-transform duration-300 translate-y-full md:translate-y-0 flex flex-col max-h-[90vh]" id="modal-panel">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
+        <div class="absolute inset-x-0 bottom-0 md:top-10 md:bottom-10 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-2xl bg-white rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-y-full" id="modal-panel">
             
-            <!-- Modal İçerik -->
-            <div class="p-6 flex-1 flex flex-col overflow-hidden">
-                <input type="hidden" id="note-id">
-                
-                <!-- Başlık Alanı -->
-                <div class="mb-4">
-                    <input type="text" id="note-title" placeholder="Not Başlığı (Ses Kaydı İsmi)..." class="w-full text-2xl font-bold font-caveat text-gray-800 placeholder-gray-400 border-none focus:ring-0 p-0 bg-transparent">
-                    <div class="h-0.5 w-full bg-gray-100 mt-1"></div>
-                </div>
-                
-                <!-- Kategori Seçimi -->
-                <div class="flex flex-wrap gap-2 mb-4" id="category-selector"></div>
-
-                <!-- Ses Kayıt Kontrolleri (Kayıt Anında Görünür) -->
-                <div id="recording-controls" class="hidden flex items-center justify-between bg-red-50 p-3 rounded-xl border border-red-100 mb-2 animate-pulse">
-                    <span class="text-red-600 text-sm font-bold flex items-center"><i data-lucide="mic" class="w-4 h-4 mr-2"></i> Kayıt Yapılıyor...</span>
-                    <div class="flex space-x-2">
-                        <button onclick="stopRecording()" class="px-3 py-1.5 bg-white border border-red-200 text-red-700 rounded-lg text-xs font-bold shadow-sm hover:bg-red-50">Durdur</button>
-                        <button onclick="saveVoiceNote()" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-red-700">KAYDET</button>
-                    </div>
-                </div>
-
-                <!-- Yazı Alanı -->
-                <div class="relative flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 group">
-                    <textarea id="note-content" placeholder="Buraya yazın veya mikrofonu kullanın..." class="w-full h-full resize-none bg-transparent border-none focus:ring-0 p-0 text-lg font-kalam text-gray-700 leading-relaxed"></textarea>
-                    
-                    <!-- Floating Butonlar -->
-                    <div class="absolute bottom-3 right-3 flex space-x-2">
-                        <!-- WhatsApp Butonu (Modal İçi) -->
-                        <button onclick="openWhatsAppMode()" class="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full shadow-md border border-green-400 transition-colors" title="WhatsApp Durumu Oluştur">
-                            <i data-lucide="smartphone" class="w-5 h-5"></i>
-                        </button>
-
-                        <button id="voice-btn" onclick="toggleVoiceInput()" class="bg-white hover:bg-red-50 text-gray-500 hover:text-red-500 p-3 rounded-full shadow-md border border-gray-100 transition-colors" title="Sesli Yaz">
-                            <i data-lucide="mic" class="w-5 h-5"></i>
-                        </button>
-                        <button onclick="toggleAIMenu()" class="bg-white hover:bg-indigo-50 text-indigo-500 p-3 rounded-full shadow-md border border-gray-100 transition-colors" title="AI Asistan">
-                            <i data-lucide="sparkles" class="w-5 h-5"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- AI Menüsü -->
-                <div id="ai-menu" class="hidden mt-3 bg-white border border-indigo-100 rounded-xl p-3 shadow-lg">
-                    <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                        <button onclick="useAI('summarize')" class="ai-btn flex items-center p-2 hover:bg-gray-50 rounded-lg text-xs text-gray-600 font-medium"><i data-lucide="file-text" class="w-4 h-4 mr-2 text-indigo-500"></i> Özetle</button>
-                        <button onclick="useAI('fix')" class="ai-btn flex items-center p-2 hover:bg-gray-50 rounded-lg text-xs text-gray-600 font-medium"><i data-lucide="check-circle" class="w-4 h-4 mr-2 text-green-500"></i> Düzelt</button>
-                        <button onclick="useAI('expand')" class="ai-btn flex items-center p-2 hover:bg-gray-50 rounded-lg text-xs text-gray-600 font-medium"><i data-lucide="maximize-2" class="w-4 h-4 mr-2 text-blue-500"></i> Genişlet</button>
-                        <button onclick="useAI('todo')" class="ai-btn flex items-center p-2 hover:bg-gray-50 rounded-lg text-xs text-gray-600 font-medium"><i data-lucide="list-todo" class="w-4 h-4 mr-2 text-orange-500"></i> Yapılacaklar</button>
-                        <button onclick="useAI('translate')" class="ai-btn flex items-center p-2 hover:bg-gray-50 rounded-lg text-xs text-gray-600 font-medium"><i data-lucide="languages" class="w-4 h-4 mr-2 text-teal-500"></i> Çeviri (EN)</button>
-                        <button onclick="useAI('title')" class="col-span-2 flex items-center justify-center p-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-xs text-indigo-700 font-bold"><i data-lucide="type" class="w-4 h-4 mr-2"></i> ✨ Başlık Öner</button>
-                    </div>
-                    <div id="ai-loading" class="hidden text-center py-2"><div class="loader mx-auto"></div></div>
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white z-10">
+                <input type="text" id="note-title" placeholder="Başlık" class="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 w-full text-gray-800 placeholder-gray-300">
+                <div class="flex gap-2">
+                    <button onclick="deleteCurrentNote()" id="btn-delete" class="hidden text-red-400 hover:bg-red-50 p-2 rounded-full"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                    <button onclick="saveNote()" class="bg-black text-white px-5 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
                 </div>
             </div>
 
-            <!-- Footer -->
-            <div class="p-4 border-t border-gray-100 flex justify-between bg-white rounded-b-2xl">
-                <button onclick="initDeleteProcess()" id="delete-btn" class="text-red-400 hover:text-red-600 px-4 py-2 text-sm font-medium hidden">Sil</button>
-                <div class="flex space-x-2 ml-auto">
-                    <button onclick="closeModal()" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg font-medium">İptal</button>
-                    <button onclick="saveNote()" class="px-6 py-2 text-sm bg-gray-900 text-white hover:bg-black rounded-lg font-bold shadow-lg transform active:scale-95 transition-all">Kaydet</button>
+            <!-- Kategori Seçimi -->
+            <div class="px-6 py-2 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar" id="modal-cats"></div>
+
+            <!-- Editör Alanı -->
+            <div class="flex-1 relative bg-white group">
+                <textarea id="note-content" class="w-full h-full p-6 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed placeholder-gray-300 font-hand text-gray-700" placeholder="Buraya yazın..."></textarea>
+                
+                <!-- AI Yükleniyor -->
+                <div id="ai-loading" class="absolute inset-0 bg-white/80 z-20 hidden flex-col items-center justify-center">
+                    <div class="loader mb-3"></div>
+                    <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Çalışıyor...</p>
+                </div>
+            </div>
+
+            <!-- Alt Toolbar (Format & AI & Ses) -->
+            <div class="editor-toolbar p-3 pb-safe">
+                <div class="flex justify-between items-center max-w-lg mx-auto">
+                    <!-- Font Seçici -->
+                    <div class="flex gap-1">
+                        <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand" title="El Yazısı">Aa</button>
+                        <button onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif" title="Kitap">Aa</button>
+                        <button onclick="setFont('font-sans')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-sans" title="Modern">Aa</button>
+                        <button onclick="setFont('font-mono')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-mono" title="Daktilo">Aa</button>
+                    </div>
+
+                    <div class="w-px h-6 bg-gray-200 mx-2"></div>
+
+                    <!-- AI ve Ses -->
+                    <div class="flex gap-2">
+                        <button onclick="toggleVoice()" id="mic-btn" class="p-3 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors"><i data-lucide="mic" class="w-5 h-5"></i></button>
+                        <div class="relative">
+                            <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
+                            <!-- AI Popup -->
+                            <div id="ai-popup" class="absolute bottom-14 right-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 p-2 hidden z-30">
+                                <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
+                                <button onclick="runAI('summarize')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 text-blue-500"></i> Özetle</button>
+                                <button onclick="runAI('expand')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2"><i data-lucide="maximize" class="w-4 h-4 text-purple-500"></i> Genişlet</button>
+                                <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 border-t mt-1 pt-2"><i data-lucide="smartphone" class="w-4 h-4 text-green-600"></i> WhatsApp</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="toast-container" class="fixed top-5 right-5 z-[70] flex flex-col space-y-2 pointer-events-none"></div>
+    <!-- WhatsApp Modal -->
+    <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[80vh]">
+            <div class="p-4 flex justify-between items-center">
+                <button onclick="closeWp()" class="text-white"><i data-lucide="x"></i></button>
+                <span class="text-xs font-mono text-gray-400" id="wp-count">0/700</span>
+            </div>
+            <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500" style="background-color: #25D366;">
+                <textarea id="wp-text" class="w-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:ring-0 resize-none" rows="8" oninput="checkWpLimit()"></textarea>
+            </div>
+            <div class="p-4 bg-gray-800 space-y-3">
+                <div class="flex justify-center gap-3">
+                    <button onclick="setWpColor('#25D366')" class="w-6 h-6 rounded-full bg-[#25D366] border border-white/20"></button>
+                    <button onclick="setWpColor('#FF5252')" class="w-6 h-6 rounded-full bg-[#FF5252] border border-white/20"></button>
+                    <button onclick="setWpColor('#448AFF')" class="w-6 h-6 rounded-full bg-[#448AFF] border border-white/20"></button>
+                    <button onclick="setWpColor('#7C4DFF')" class="w-6 h-6 rounded-full bg-[#7C4DFF] border border-white/20"></button>
+                    <button onclick="setWpColor('#212121')" class="w-6 h-6 rounded-full bg-[#212121] border border-white/20"></button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="runAI('whatsapp')" class="bg-indigo-600 text-white py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> AI Sığdır</button>
+                    <button onclick="saveWpToNote()" class="bg-gray-700 text-white py-2 rounded-lg text-sm font-bold">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ayarlar Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <h2 class="text-xl font-bold mb-4">Ayarlar</h2>
+            
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Gemini API Key (AI İçin)</label>
+                <input type="password" id="gemini-key" class="w-full border rounded-lg p-2 text-sm" placeholder="AIzaSy...">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Firebase Config (Bulut İçin)</label>
+                <input type="password" id="fb-key" class="w-full border rounded-lg p-2 text-sm mb-2" placeholder="API Key">
+                <input type="text" id="fb-app" class="w-full border rounded-lg p-2 text-sm" placeholder="App ID">
+            </div>
+
+            <div class="flex justify-between">
+                <button onclick="downloadBackup()" class="text-green-600 text-sm font-bold flex items-center"><i data-lucide="download" class="w-4 h-4 mr-1"></i> Yedekle</button>
+                <div class="flex gap-2">
+                    <button onclick="toggleSettings()" class="text-gray-500 text-sm">İptal</button>
+                    <button onclick="saveSettings()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[80] space-y-2 pointer-events-none"></div>
+
+    <!-- Gizli Mod Overlay -->
+    <div id="stealth-overlay" class="fixed inset-0 bg-black z-[100] hidden flex flex-col items-center justify-center text-gray-800 text-xs select-none" onclick="toggleStealth()">
+        <div class="mb-4 animate-pulse">● Kayıt</div>
+        <p>Çıkmak için dokun</p>
+        <div id="stealth-text" class="mt-4 opacity-10 max-w-xs text-center truncate"></div>
+    </div>
 
     <script>
-        let userApiKey = localStorage.getItem('gemini_api_key') || "";
-        const systemApiKey = ""; 
+        // --- Durum Yönetimi ---
+        let notes = [];
+        let currentFilter = 'all';
+        let currentNoteId = null;
+        let recognition = null;
+        let isListening = false;
+        let currentFont = 'font-hand';
+        let currentCat = 'guncel';
 
         const CATEGORIES = {
-            'tarih': { label: 'Tarih', theme: 'theme-tarih', titleClass: 'title-tarih' },
-            'dini': { label: 'Dini', theme: 'theme-dini', titleClass: 'title-dini' },
-            'siyasi': { label: 'Siyasi', theme: 'theme-siyasi', titleClass: 'title-siyasi' },
-            'egitim': { label: 'Eğitim', theme: 'theme-egitim', titleClass: 'title-egitim' },
-            'guncel': { label: 'Güncel', theme: 'theme-guncel', titleClass: 'title-guncel' },
-            'kisisel': { label: 'Kişisel', theme: 'theme-kisisel', titleClass: 'title-kisisel' },
-            'is': { label: 'İş & Proje', theme: 'theme-is', titleClass: 'title-is' },
-            'diger': { label: 'Diğer', theme: 'theme-diger', titleClass: 'title-diger' },
+            'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 
+            'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 
+            'kisisel': 'Kişisel', 'diger': 'Diğer'
         };
 
-        let allNotes = [];
-        let currentFilter = 'all';
-        let isListening = false;
-        let isStealthMode = false;
-        let recognition = null;
-        let selectedCategory = 'guncel';
-        let isEngineRunning = false;
-        let noteToDeleteId = null;
-
+        // --- Başlangıç ---
         document.addEventListener('DOMContentLoaded', () => {
+            window.loadLocalNotes();
+            setupVoice();
             lucide.createIcons();
-            initCategorySelector();
-            setupVoiceRecognition();
             
-            // Ayarları yükle
-            if(userApiKey) document.getElementById('api-key-input').value = userApiKey;
-            
-            const fbApiKey = localStorage.getItem('fb_api_key');
-            if(fbApiKey) document.getElementById('fb-api-key-input').value = fbApiKey;
-            
-            const fbAppId = localStorage.getItem('fb_app_id');
-            if(fbAppId) document.getElementById('fb-app-id-input').value = fbAppId;
+            // Ayarları form içine doldur
+            document.getElementById('gemini-key').value = localStorage.getItem('gemini_api_key') || "";
+            document.getElementById('fb-key').value = localStorage.getItem('fb_api_key') || "";
+            document.getElementById('fb-app').value = localStorage.getItem('fb_app_id') || "";
         });
 
-        // --- YEDEKLEME (IMPORT / EXPORT) ---
-        window.exportData = () => {
-            if (window.localNotes.length === 0) {
-                showToast("Yedeklenecek not bulunamadı!", "warning");
-                return;
+        // --- Veri ---
+        window.loadLocalNotes = () => {
+            const saved = localStorage.getItem('baris_notes');
+            if (saved) {
+                window.localNotes = JSON.parse(saved);
+                render(window.localNotes);
+            } else {
+                window.localNotes = [];
+                render([]);
             }
-            const dataStr = JSON.stringify(window.localNotes, null, 2);
-            const blob = new Blob([dataStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = url;
-            const date = new Date().toISOString().slice(0,10);
-            a.download = `baris-notlari-yedek-${date}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast("Yedek dosyası indirildi!", "success");
         };
 
-        window.importData = (input) => {
-            const file = input.files[0];
-            if (!file) return;
+        window.saveLocalToDisk = () => {
+            localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
+            render(window.localNotes);
+        };
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const importedNotes = JSON.parse(e.target.result);
-                    if (Array.isArray(importedNotes)) {
-                        // Mevcut notlarla birleştir (basit birleştirme)
-                        window.localNotes = [...window.localNotes, ...importedNotes];
-                        // Tekrarları ID'ye göre temizle
-                        const uniqueNotes = Array.from(new Map(window.localNotes.map(note => [note.id, note])).values());
-                        window.localNotes = uniqueNotes;
-                        
-                        window.saveLocalNotes();
-                        showToast(`${importedNotes.length} not başarıyla yüklendi!`, "success");
-                        // Sayfayı yenilemeye gerek yok, render yeterli ama garanti olsun
-                        window.location.reload();
-                    } else {
-                        showToast("Geçersiz yedek dosyası formatı.", "error");
-                    }
-                } catch (err) {
-                    console.error(err);
-                    showToast("Dosya okuma hatası.", "error");
-                }
+        window.syncNotes = (cloudNotes) => {
+            // Basit birleştirme (Bulut verisini öncelikli al)
+            const noteMap = new Map();
+            window.localNotes.forEach(n => noteMap.set(n.id, n));
+            cloudNotes.forEach(n => noteMap.set(n.id, n));
+            window.localNotes = Array.from(noteMap.values());
+            window.saveLocalToDisk();
+        };
+
+        // --- Arayüz ---
+        function render(data) {
+            const grid = document.getElementById('notes-grid');
+            const empty = document.getElementById('empty-state');
+            grid.innerHTML = '';
+
+            const filtered = data.filter(n => currentFilter === 'all' || n.category === currentFilter)
+                                 .sort((a,b) => (b.updatedAt?.seconds || b.updatedAt) - (a.updatedAt?.seconds || a.updatedAt));
+
+            if (filtered.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            } else {
+                empty.classList.add('hidden');
+            }
+
+            filtered.forEach(note => {
+                const el = document.createElement('div');
+                const catClass = `cat-${note.category || 'diger'}`;
+                const fontClass = note.font || 'font-hand';
+                const date = new Date((note.updatedAt?.seconds || note.updatedAt / 1000) * 1000).toLocaleDateString('tr-TR');
+
+                el.className = `note-card ${catClass} cursor-pointer flex flex-col h-48 animate-fade-in bg-white`;
+                el.innerHTML = `
+                    <div class="p-4 flex-1 overflow-hidden relative group" onclick="openNote('${note.id}')">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg leading-tight line-clamp-2">${note.title || 'Başlıksız'}</h3>
+                            <span class="text-[10px] uppercase font-bold opacity-50 border border-current px-1 rounded">${CATEGORIES[note.category]}</span>
+                        </div>
+                        <p class="text-sm opacity-80 ${fontClass} line-clamp-4 whitespace-pre-line">${note.content || ''}</p>
+                        <span class="absolute bottom-3 right-4 text-xs opacity-40">${date}</span>
+                    </div>
+                `;
+                grid.appendChild(el);
+            });
+        }
+
+        function filter(cat) {
+            currentFilter = cat;
+            document.querySelectorAll('.cat-btn').forEach(b => {
+                b.classList.remove('bg-gray-800', 'text-white');
+                b.classList.add('bg-white');
+            });
+            const btn = Array.from(document.querySelectorAll('.cat-btn')).find(b => b.innerText === CATEGORIES[cat] || (cat === 'all' && b.innerText === 'Tümü'));
+            if(btn) {
+                btn.classList.add('bg-gray-800', 'text-white');
+                btn.classList.remove('bg-white');
+            }
+            render(window.localNotes);
+        }
+
+        function search() {
+            const val = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = window.localNotes.filter(n => (n.title+n.content).toLowerCase().includes(val));
+            const grid = document.getElementById('notes-grid');
+            grid.innerHTML = ''; 
+            // Render logic duplicate for search simplicity
+            if(filtered.length === 0) document.getElementById('empty-state').classList.remove('hidden');
+            else {
+                document.getElementById('empty-state').classList.add('hidden');
+                filtered.forEach(note => {
+                    // (Same render logic card creation - simplified for brevity)
+                    const el = document.createElement('div');
+                    el.className = `note-card cat-${note.category} cursor-pointer flex flex-col h-48 bg-white`;
+                    el.innerHTML = `<div class="p-4" onclick="openNote('${note.id}')"><h3 class="font-bold">${note.title}</h3><p class="text-sm mt-2 line-clamp-4">${note.content}</p></div>`;
+                    grid.appendChild(el);
+                });
+            }
+        }
+
+        // --- Modal & Editör ---
+        function openModal() {
+            currentNoteId = null;
+            document.getElementById('note-title').value = '';
+            document.getElementById('note-content').value = '';
+            document.getElementById('btn-delete').classList.add('hidden');
+            renderCats('guncel');
+            setFont('font-hand');
+            document.getElementById('note-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
+        }
+
+        function openNote(id) {
+            const note = window.localNotes.find(n => n.id === id);
+            if (!note) return;
+            currentNoteId = id;
+            document.getElementById('note-title').value = note.title || '';
+            document.getElementById('note-content').value = note.content || '';
+            document.getElementById('btn-delete').classList.remove('hidden');
+            renderCats(note.category || 'guncel');
+            setFont(note.font || 'font-hand');
+            
+            document.getElementById('note-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-panel').classList.add('translate-y-full');
+            setTimeout(() => {
+                document.getElementById('note-modal').classList.add('hidden');
+                document.getElementById('ai-popup').classList.add('hidden');
+                if(isListening) toggleVoice();
+            }, 300);
+        }
+
+        function renderCats(selected) {
+            currentCat = selected;
+            const div = document.getElementById('modal-cats');
+            div.innerHTML = '';
+            Object.keys(CATEGORIES).forEach(k => {
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${k === selected ? 'bg-gray-800 text-white' : 'bg-white text-gray-500'}`;
+                btn.innerText = CATEGORIES[k];
+                btn.onclick = () => { renderCats(k); };
+                div.appendChild(btn);
+            });
+        }
+
+        function setFont(fontClass) {
+            currentFont = fontClass;
+            const area = document.getElementById('note-content');
+            area.className = area.className.replace(/font-\w+/, fontClass);
+        }
+
+        async function saveNote() {
+            const title = document.getElementById('note-title').value.trim();
+            const content = document.getElementById('note-content').value.trim();
+            if (!title && !content) return showToast('Boş not kaydedilemez', 'error');
+
+            const noteData = {
+                id: currentNoteId, // Varsa ID
+                title, content, 
+                category: currentCat,
+                font: currentFont
             };
-            reader.readAsText(file);
-        };
 
-        // --- Render ---
-        window.renderNotes = (notes) => {
-            allNotes = notes; // Bu global değişkeni de güncelle
-            const container = document.getElementById('notes-container');
-            const searchVal = document.getElementById('searchInput').value.toLowerCase();
-            container.innerHTML = '';
-            
-            const filteredNotes = notes.filter(note => {
-                const matchesFilter = currentFilter === 'all' || note.category === currentFilter;
-                const matchesSearch = (note.title || '').toLowerCase().includes(searchVal) || (note.content || '').toLowerCase().includes(searchVal);
-                return matchesFilter && matchesSearch;
-            });
+            await window.saveNoteToStorage(noteData);
+            closeModal();
+            showToast('Kaydedildi', 'success');
+        }
 
-            if (filteredNotes.length === 0) {
-                container.innerHTML = `<div class="text-center text-gray-400 mt-10 font-caveat text-2xl">Henüz not yok...</div>`;
-                return;
+        async function deleteCurrentNote() {
+            if(confirm("Bu notu silmek istiyor musun?")) {
+                await window.deleteNoteFromStorage(currentNoteId);
+                closeModal();
+                showToast('Silindi', 'success');
+            }
+        }
+
+        // --- Yapay Zeka (Gemini) ---
+        function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
+
+        async function runAI(action) {
+            toggleAiMenu(); // Menüyü kapat
+            const content = document.getElementById('note-content').value;
+            if(!content) return showToast("Önce bir şeyler yazmalısın!", "error");
+
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if(!apiKey) return showToast("Ayarlardan API Anahtarı girmelisin!", "error");
+
+            document.getElementById('ai-loading').classList.remove('hidden');
+            document.getElementById('ai-loading').classList.add('flex');
+
+            let prompt = "";
+            if (action === 'fix') prompt = `Bu metni Türkçe imla kurallarına göre düzelt ve daha akıcı hale getir:\n\n${content}`;
+            else if (action === 'summarize') prompt = `Bu metni Türkçe olarak kısa maddeler halinde özetle:\n\n${content}`;
+            else if (action === 'expand') prompt = `Bu metindeki ana fikri koruyarak daha detaylı, edebi ve zengin bir şekilde genişlet (Türkçe):\n\n${content}`;
+            else if (action === 'whatsapp') {
+                prompt = `Bu metni WhatsApp durumu (max 700 karakter) için kısalt, duygusuna uygun emojiler ekle ve arka plan rengi seç (1-5 arası sayı). Cevap formatı: METİN|||RENK_NO (1:Yeşil, 2:Kırmızı, 3:Mavi, 4:Mor, 5:Siyah). Metin: ${content}`;
             }
 
-            const categoriesToShow = currentFilter === 'all' ? Object.keys(CATEGORIES) : [currentFilter];
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await res.json();
+                
+                if(data.error) throw new Error(data.error.message);
 
-            categoriesToShow.forEach(catKey => {
-                const catInfo = CATEGORIES[catKey];
-                const catNotes = filteredNotes.filter(n => n.category === catKey);
-
-                if (catNotes.length > 0) {
-                    const section = document.createElement('div');
-                    section.className = 'mb-8 animate-fade-in';
-                    const titleDiv = document.createElement('div');
-                    titleDiv.className = `section-title ${catInfo.titleClass} text-white shadow-sm`;
-                    titleDiv.textContent = catInfo.label;
-                    section.appendChild(titleDiv);
-
-                    const grid = document.createElement('div');
-                    grid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
-
-                    catNotes.forEach(note => {
-                        const div = document.createElement('div');
-                        const rotation = Math.floor(Math.random() * 4) - 2;
-                        div.className = `post-it ${catInfo.theme} cursor-pointer flex flex-col h-64 shadow-md group relative`;
-                        div.style.transform = `rotate(${rotation}deg)`;
-                        div.onclick = (e) => { if(!e.target.closest('.action-btn')) openEditModal(note); };
-
-                        let preview = note.content || '';
-                        if(preview.length > 120) preview = preview.substring(0, 120) + '...';
-                        
-                        // Tarih işlemesi (Hem Timestamp hem yerel Date desteği)
-                        let dateStr = "Yeni";
-                        if(note.updatedAt) {
-                            const secs = note.updatedAt.seconds || (new Date(note.updatedAt).getTime() / 1000);
-                            dateStr = new Date(secs * 1000).toLocaleDateString('tr-TR', {day:'numeric', month:'short'});
-                        }
-
-                        div.innerHTML = `
-                            <div class="tape"></div>
-                            
-                            <!-- Hızlı Silme Butonu -->
-                            <button class="action-btn absolute top-2 right-2 p-1.5 bg-red-100/80 hover:bg-red-500 hover:text-white rounded-full transition-all opacity-0 group-hover:opacity-100 z-20 shadow-sm transform hover:scale-110" onclick="confirmDelete(event, '${note.id}')" title="Notu Sil">
-                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                            </button>
-
-                            <div class="card-header p-4 pt-6 pb-2 relative">
-                                <span class="text-[10px] font-bold opacity-60 block text-right mr-6">${dateStr}</span>
-                                <h3 class="font-bold text-lg leading-tight font-caveat tracking-wide mt-1 pr-4">${note.title || 'İsimsiz Not'}</h3>
-                            </div>
-                            <div class="p-4 flex-1 overflow-hidden relative">
-                                <div class="text-sm leading-relaxed opacity-90 font-kalam">${marked.parse(preview)}</div>
-                            </div>
-                        `;
-                        grid.appendChild(div);
-                    });
-                    section.appendChild(grid);
-                    container.appendChild(section);
+                const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (action === 'whatsapp') {
+                    // WhatsApp özel işleme
+                    const parts = result.split('|||');
+                    document.getElementById('wp-text').value = parts[0].trim();
+                    if(parts[1]) {
+                        const colors = ['#25D366', '#FF5252', '#448AFF', '#7C4DFF', '#212121'];
+                        setWpColor(colors[parseInt(parts[1])-1] || colors[0]);
+                    }
+                    closeModal(); // Not modalını kapat
+                    document.getElementById('wp-modal').classList.remove('hidden'); // WP modalını aç
+                } else {
+                    // Normal not güncelleme
+                    document.getElementById('note-content').value = result;
                 }
-            });
-            lucide.createIcons();
-        };
+                
+                showToast("Yapay Zeka tamamladı!", "success");
 
-        // --- Voice Logic ---
-        function setupVoiceRecognition() {
+            } catch (error) {
+                console.error(error);
+                showToast("AI Hatası: " + error.message, "error");
+            } finally {
+                document.getElementById('ai-loading').classList.add('hidden');
+                document.getElementById('ai-loading').classList.remove('flex');
+            }
+        }
+
+        // --- WhatsApp Studio ---
+        function openWhatsAppMode() {
+            // Eğer not modalı açıksa oradaki metni al
+            const currentContent = document.getElementById('note-content').value;
+            document.getElementById('wp-text').value = currentContent;
+            checkWpLimit();
+            document.getElementById('wp-modal').classList.remove('hidden');
+        }
+        function closeWp() { document.getElementById('wp-modal').classList.add('hidden'); }
+        function setWpColor(c) { document.getElementById('wp-preview').style.backgroundColor = c; }
+        function checkWpLimit() {
+            const len = document.getElementById('wp-text').value.length;
+            document.getElementById('wp-count').innerText = `${len}/700`;
+            document.getElementById('wp-count').className = len > 700 ? "text-red-500 font-bold" : "text-gray-400 font-mono";
+        }
+        function saveWpToNote() {
+            const text = document.getElementById('wp-text').value;
+            if(!currentNoteId) {
+                // Yeni not
+                window.saveNoteToStorage({title: 'Durum Yazısı', content: text, category: 'diger', font: 'font-hand'});
+            } else {
+                // Mevcut notu güncelle
+                document.getElementById('note-content').value = text;
+                saveNote();
+            }
+            closeWp();
+            showToast("Kaydedildi", "success");
+        }
+
+        // --- Ses ---
+        function setupVoice() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 recognition = new SpeechRecognition();
                 recognition.lang = 'tr-TR';
-                recognition.continuous = true; 
-                recognition.interimResults = true; 
+                recognition.continuous = true;
+                recognition.interimResults = true;
                 
-                recognition.onstart = () => { isEngineRunning = true; };
-                recognition.onend = () => { 
-                    isEngineRunning = false; 
-                    if(isListening) try { recognition.start(); } catch{} else updateMicUI(); 
-                };
-
                 recognition.onresult = (e) => {
                     let final = '';
                     for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
                     if(final) {
                         const el = document.getElementById('note-content');
                         el.value += (el.value ? ' ' : '') + final;
-                        if(isStealthMode) document.getElementById('stealth-transcript').textContent = el.value.slice(-50);
+                        if(isListening && document.body.classList.contains('stealth-mode')) {
+                            document.getElementById('stealth-text').innerText = final;
+                        }
                     }
                 };
-                recognition.onerror = (e) => { 
-                    if(e.error === 'not-allowed') showToast("Mikrofon izni verilmedi!", "error");
-                    if (e.error === 'aborted' || e.error === 'not-allowed') {
-                        isListening = false;
-                        updateMicUI();
-                    }
-                };
-            } else {
-                showToast("Tarayıcınız ses kaydını desteklemiyor.", "warning");
-                document.getElementById('voice-btn').style.display = 'none';
+                recognition.onend = () => { if(isListening) try{recognition.start()}catch{} else updateMicState(false); };
             }
         }
-
-        function startQuickVoiceNote() {
-            toggleNewNoteModal(); 
-            selectedCategory = 'diger'; 
-            initCategorySelector(); 
-            setTimeout(() => { toggleVoiceInput(true); }, 300);
+        function toggleVoice() {
+            if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
+            isListening = !isListening;
+            updateMicState(isListening);
+            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} }
+            else { try{ recognition.stop(); }catch{} }
         }
-
-        function toggleVoiceInput(forceState = null) {
-            if(!recognition) return;
-            const desiredState = forceState !== null ? forceState : !isListening;
-            if (desiredState && isEngineRunning && isListening) return;
-
-            isListening = desiredState;
-            const id = document.getElementById('note-id').value;
-            const content = document.getElementById('note-content').value;
-            if(isListening && !id && !content) { selectedCategory = 'diger'; initCategorySelector(); }
-            updateMicUI();
-            
-            if(isListening) { 
-                if (!isEngineRunning) { try{ recognition.start(); if(!isStealthMode) showToast("Kayıt Başladı...", "info"); }catch{} }
-            } else { 
-                try{ recognition.stop(); }catch{} 
-            }
-        }
-
-        function stopRecording() { toggleVoiceInput(false); showToast("Kayıt durduruldu.", "info"); }
-        function saveVoiceNote() { toggleVoiceInput(false); setTimeout(saveNote, 200); }
-
-        function updateMicUI() {
-            const btn = document.getElementById('voice-btn');
-            const controls = document.getElementById('recording-controls');
-            if(isListening) {
-                btn.classList.add('mic-active');
-                btn.innerHTML = '<i data-lucide="mic-off" class="w-5 h-5"></i>';
-                if(!isStealthMode) controls.classList.remove('hidden');
+        function updateMicState(on) {
+            const btn = document.getElementById('mic-btn');
+            if(on) {
+                btn.classList.add('mic-active', 'bg-red-100', 'text-red-600');
+                btn.innerHTML = '<i data-lucide="mic-off"></i>';
             } else {
-                btn.classList.remove('mic-active');
-                btn.innerHTML = '<i data-lucide="mic" class="w-5 h-5"></i>';
-                controls.classList.add('hidden');
+                btn.classList.remove('mic-active', 'bg-red-100', 'text-red-600');
+                btn.innerHTML = '<i data-lucide="mic"></i>';
             }
             lucide.createIcons();
         }
 
-        // --- WhatsApp Logic (GÜNCELLENDİ) ---
-        function openWhatsAppMode() {
-            let content = "";
-            const noteModal = document.getElementById('note-modal');
-            if (!noteModal.classList.contains('hidden')) {
-                content = document.getElementById('note-content').value;
-            }
-            document.getElementById('wp-text').value = content;
-            document.getElementById('whatsapp-modal').classList.remove('hidden');
-            updateCharCount();
+        // --- Ayarlar & Yedek ---
+        function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
+        function saveSettings() {
+            localStorage.setItem('gemini_api_key', document.getElementById('gemini-key').value.trim());
+            localStorage.setItem('fb_api_key', document.getElementById('fb-key').value.trim());
+            localStorage.setItem('fb_app_id', document.getElementById('fb-app').value.trim());
+            toggleSettings();
+            showToast("Ayarlar kaydedildi, sayfayı yenileyin", "success");
+            setTimeout(() => location.reload(), 1000);
+        }
+        function downloadBackup() {
+            const blob = new Blob([JSON.stringify(window.localNotes, null, 2)], {type : 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `yedek-${Date.now()}.json`;
+            a.click();
         }
 
-        function closeWhatsAppMode() {
-            document.getElementById('whatsapp-modal').classList.add('hidden');
-        }
-
-        function updateCharCount() {
-            const text = document.getElementById('wp-text').value;
-            const count = text.length;
-            const counter = document.getElementById('char-counter');
-            counter.textContent = `${count}/700`;
-            if(count > 700) {
-                counter.classList.add('bg-red-600', 'text-white');
-                counter.classList.remove('bg-black/30');
-            } else {
-                counter.classList.remove('bg-red-600');
-                counter.classList.add('bg-black/30', 'text-white');
+        function toggleStealth() {
+            document.body.classList.toggle('stealth-mode');
+            if(document.body.classList.contains('stealth-mode')) {
+                if(!isListening) toggleVoice();
             }
         }
 
-        function setWpBg(className) {
-            const preview = document.getElementById('wp-preview');
-            preview.classList.remove('wp-bg-1', 'wp-bg-2', 'wp-bg-3', 'wp-bg-4', 'wp-bg-5', 'wp-bg-6', 'wp-bg-7', 'wp-bg-8');
-            preview.classList.add(className);
-        }
-
-        function copyWpText() {
-            const text = document.getElementById('wp-text').value;
-            navigator.clipboard.writeText(text).then(() => {
-                showToast("Metin kopyalandı! WhatsApp'a yapıştırabilirsiniz.", "success");
-            });
-        }
-
-        function saveWhatsAppStatus() {
-            const text = document.getElementById('wp-text').value;
-            if(!text.trim()) return showToast("Boş durum kaydedilemez", "warning");
-
-            const noteModal = document.getElementById('note-modal');
-            if (!noteModal.classList.contains('hidden')) {
-                document.getElementById('note-content').value = text;
-                closeWhatsAppMode();
-                showToast("Not içeriği güncellendi.", "success");
-            } else {
-                const title = text.split(' ').slice(0, 3).join(' ') + '...';
-                const noteData = {
-                    title: title,
-                    content: text,
-                    category: 'diger' 
-                };
-                window.addNoteToApp(noteData);
-                closeWhatsAppMode();
-                showToast("Durum notlara kaydedildi.", "success");
-            }
-        }
-
-        // --- Other Functions ---
-        function toggleStealthMode() {
-            const body = document.body;
-            isStealthMode = !isStealthMode;
-            if (isStealthMode) {
-                body.classList.add('stealth-mode');
-                if (!isListening) toggleVoiceInput(true);
-                document.getElementById('note-modal').classList.add('hidden');
-                showToast("Gizli Mod Aktif", "warning");
-            } else {
-                body.classList.remove('stealth-mode');
-                if (isListening) {
-                    toggleVoiceInput(false);
-                    setTimeout(() => { toggleNewNoteModal(true); document.getElementById('note-title').focus(); showToast("Kayıt bitti, isim verin.", "success"); }, 500);
-                }
-            }
-        }
-
-        function filterNotes(category) {
-            currentFilter = category;
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-gray-800', 'text-white');
-                btn.classList.add('bg-white');
-            });
-            const btns = document.querySelectorAll('.filter-btn');
-            btns.forEach(b => {
-                if(b.onclick.toString().includes(`'${category}'`)) {
-                    b.classList.add('active', 'bg-gray-800', 'text-white');
-                    b.classList.remove('bg-white');
-                }
-            });
-            renderNotes(allNotes); // allNotes artık localNotes olabilir, sorun yok
-        }
-
-        function searchNotes() { renderNotes(window.localNotes); } // Local'den ara
-
-        function toggleNewNoteModal(keepContent = false) {
-            document.getElementById('note-id').value = '';
-            document.getElementById('note-title').value = '';
-            if(!keepContent) document.getElementById('note-content').value = '';
-            
-            document.getElementById('delete-btn').classList.add('hidden');
-            document.getElementById('ai-menu').classList.add('hidden');
-            document.getElementById('recording-controls').classList.add('hidden');
-            
-            selectedCategory = 'guncel';
-            initCategorySelector();
-            
-            const modal = document.getElementById('note-modal');
-            const panel = document.getElementById('modal-panel');
-            modal.classList.remove('hidden');
-            setTimeout(() => panel.classList.remove('translate-y-full'), 10);
-        }
-
-        function openEditModal(note) {
-            document.getElementById('note-id').value = note.id;
-            document.getElementById('note-title').value = note.title || '';
-            document.getElementById('note-content').value = note.content || '';
-            document.getElementById('delete-btn').classList.remove('hidden');
-            document.getElementById('ai-menu').classList.add('hidden');
-            document.getElementById('recording-controls').classList.add('hidden');
-            
-            selectedCategory = note.category || 'guncel';
-            initCategorySelector();
-            
-            const modal = document.getElementById('note-modal');
-            const panel = document.getElementById('modal-panel');
-            modal.classList.remove('hidden');
-            setTimeout(() => panel.classList.remove('translate-y-full'), 10);
-        }
-
-        function closeModal() {
-            const panel = document.getElementById('modal-panel');
-            panel.classList.add('translate-y-full');
-            setTimeout(() => {
-                document.getElementById('note-modal').classList.add('hidden');
-                if(isListening && !isStealthMode) toggleVoiceInput(); 
-            }, 300);
-        }
-
-        function initCategorySelector() {
-            const container = document.getElementById('category-selector');
-            container.innerHTML = '';
-            Object.keys(CATEGORIES).forEach(key => {
-                const btn = document.createElement('button');
-                const isActive = key === selectedCategory;
-                btn.className = `px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isActive ? 'bg-gray-800 text-white ring-2 ring-offset-1 ring-gray-800' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`;
-                btn.textContent = CATEGORIES[key].label;
-                btn.onclick = () => selectCategory(key);
-                container.appendChild(btn);
-            });
-        }
-
-        function selectCategory(key) { selectedCategory = key; initCategorySelector(); }
-
-        async function saveNote() {
-            const id = document.getElementById('note-id').value;
-            const title = document.getElementById('note-title').value.trim();
-            const content = document.getElementById('note-content').value.trim();
-            if(!content && !title) { showToast("Boş not olmaz!", "warning"); return; }
-            
-            const noteData = { title, content, category: selectedCategory };
-            if(id) await window.updateNoteApp(id, noteData);
-            else await window.addNoteToApp(noteData);
-            closeModal();
-            showToast("Kaydedildi!", "success");
-        }
-
-        function confirmDelete(event, id) {
-            event.stopPropagation(); 
-            noteToDeleteId = id;
-            document.getElementById('confirm-modal').classList.remove('hidden');
-        }
-
-        function initDeleteProcess() {
-            const id = document.getElementById('note-id').value;
-            if(!id) return;
-            noteToDeleteId = id;
-            document.getElementById('confirm-modal').classList.remove('hidden');
-        }
-
-        function closeConfirmModal() {
-            document.getElementById('confirm-modal').classList.add('hidden');
-            noteToDeleteId = null;
-        }
-
-        async function performDelete() {
-            if (noteToDeleteId) {
-                await window.deleteNoteApp(noteToDeleteId);
-                const editModal = document.getElementById('note-modal');
-                if (!editModal.classList.contains('hidden')) { closeModal(); }
-                showToast("Not başarıyla silindi.", "info");
-                closeConfirmModal();
-            }
-        }
-
-        function toggleSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-        
-        function saveApiKey() { 
-            // Gemini API
-            const k = document.getElementById('api-key-input').value.trim();
-            if(k) localStorage.setItem('gemini_api_key', k), userApiKey=k;
-            else localStorage.removeItem('gemini_api_key'), userApiKey="";
-            
-            // Firebase API
-            const fbK = document.getElementById('fb-api-key-input').value.trim();
-            const fbApp = document.getElementById('fb-app-id-input').value.trim();
-            
-            if(fbK && fbApp) {
-                localStorage.setItem('fb_api_key', fbK);
-                localStorage.setItem('fb_app_id', fbApp);
-                showToast("Tüm ayarlar kaydedildi. Yenileniyor...", "success");
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                showToast("Gemini ayarı kaydedildi.", "success");
-                toggleSettingsModal();
-            }
-        }
-        
-        function saveAllSettings() {
-            saveApiKey(); // Aynı fonksiyonu kullan
-        }
-
-        function toggleAIMenu() { document.getElementById('ai-menu').classList.toggle('hidden'); }
-
-        async function useAI(action) {
-            let content = "";
-            let prompt = "";
-            
-            // WhatsApp Modu için özel durum
-            if(action === 'whatsapp') {
-                content = document.getElementById('wp-text').value;
-                if(!content) return showToast("Önce bir şeyler yazmalısın!", "warning");
-                prompt = `Aşağıdaki metni WhatsApp Durum özelliği (max 700 karakter) için düzenle, emoji ekle. Ayrıca metnin duygusuna uygun bir arka plan rengi seç (1-8 arası sayı). Cevabı tam olarak şu formatta ver: "METİN|||RENK_NO". (Renkler: 1:Yeşil, 2:Pembe, 3:Mavi, 4:Beyaz/Gri, 5:Turuncu, 6:Neon, 7:Mor, 8:Siyah).\n\nMetin: ${content}`;
-            } else {
-                content = document.getElementById('note-content').value;
-                if(!content) return;
-                
-                if(action === 'title') prompt = `Bu metne kısa bir başlık ver (sadece başlık): ${content}`;
-                else if(action === 'todo') prompt = `Yapılacaklar listesi çıkar: ${content}`;
-                else prompt = `Bu metni ${action === 'summarize' ? 'özetle' : action === 'fix' ? 'düzelt' : 'genişlet'}: ${content}`;
-            }
-
-            const activeKey = userApiKey || systemApiKey;
-            if (!activeKey) { toggleSettingsModal(); return showToast("API Key gerekli!", "warning"); }
-
-            document.getElementById('ai-loading').classList.remove('hidden');
-            
-            try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`, {
-                    method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                const data = await res.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if(text) {
-                    if(action === 'title') document.getElementById('note-title').value = text.trim();
-                    else if(action === 'whatsapp') {
-                        const parts = text.split('|||');
-                        if (parts.length >= 2) {
-                            const newText = parts[0].trim();
-                            const colorIndex = parts[1].trim();
-                            document.getElementById('wp-text').value = newText;
-                            setWpBg(`wp-bg-${colorIndex}`); 
-                        } else {
-                            document.getElementById('wp-text').value = text.trim();
-                        }
-                        updateCharCount();
-                        showToast("Düzenlendi ve renk seçildi!", "success");
-                    }
-                    else document.getElementById('note-content').value += `\n\n-- AI --\n${text}`;
-                }
-            } catch(e) { console.error(e); showToast("AI Hatası", "error"); }
-            finally { document.getElementById('ai-loading').classList.add('hidden'); toggleAIMenu(); }
-        }
-
+        // Toast
         function showToast(msg, type) {
-            const t = document.createElement('div');
-            const bg = type === 'error' ? 'bg-red-600' : (type === 'success' ? 'bg-green-600' : 'bg-gray-800');
-            t.className = `${bg} text-white px-4 py-3 rounded shadow-lg text-sm`;
-            t.textContent = msg;
-            document.getElementById('toast-container').appendChild(t);
-            setTimeout(() => t.remove(), 3000);
+            const div = document.createElement('div');
+            div.className = `px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold animate-fade-in ${type === 'error' ? 'bg-red-500' : 'bg-gray-800'}`;
+            div.innerText = msg;
+            document.getElementById('toast-container').appendChild(div);
+            setTimeout(() => div.remove(), 3000);
         }
     </script>
 </body>
