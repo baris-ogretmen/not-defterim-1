@@ -23,7 +23,11 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Global Firebase Nesneleri
         window.firebaseData = { db: null, auth: null, user: null, active: false };
+
+        // Silinen notların geri gelmesini engellemek için geçici hafıza
+        window.deletedNoteIds = new Set();
 
         const savedApiKey = localStorage.getItem('fb_api_key');
         const savedAppId = localStorage.getItem('fb_app_id');
@@ -39,7 +43,7 @@
         };
 
         async function initApp() {
-            window.loadLocalNotes(); // Önce yerel veriyi göster (Hız için)
+            window.loadLocalNotes();
 
             if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
                 console.log("Yerel mod.");
@@ -76,23 +80,27 @@
             const q = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', uid, 'notes');
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const cloudNotes = [];
-                snapshot.forEach(d => cloudNotes.push({ id: d.id, ...d.data() }));
+                snapshot.forEach(d => {
+                    // Eğer bu ID silinenler listesindeyse, listeye alma
+                    if (!window.deletedNoteIds.has(d.id)) {
+                        cloudNotes.push({ id: d.id, ...d.data() });
+                    }
+                });
                 window.syncNotes(cloudNotes);
             });
         }
 
         initApp();
 
-        // CRUD (Hızlandırılmış)
         window.saveNoteToStorage = async (note) => {
-            // Yerele hemen kaydet
             const localNote = { ...note, id: note.id || 'loc_' + Date.now(), updatedAt: Date.now() };
+            window.deletedNoteIds.delete(localNote.id);
+            
             const existingIdx = window.localNotes.findIndex(n => n.id === note.id);
             if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
             else window.localNotes.push(localNote);
             window.saveLocalToDisk();
 
-            // Buluta arkada kaydet (Await etme, UI donmasın)
             if (window.firebaseData.active) {
                 const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
                 if (note.id && !note.id.startsWith('loc_')) {
@@ -104,13 +112,22 @@
         };
 
         window.deleteNoteFromStorage = async (id) => {
-            // Yerelden hemen sil
-            window.localNotes = window.localNotes.filter(n => n.id !== id);
-            window.saveLocalToDisk();
+            // 1. Hemen ID'yi kara listeye al
+            window.deletedNoteIds.add(id);
 
-            // Buluttan arkada sil
+            // 2. GÖRSEL MÜDAHALE: DOM'dan anında sil (Kullanıcıya hız hissi ver)
+            const noteEl = document.querySelector(`[data-note-id="${id}"]`);
+            if (noteEl) noteEl.remove();
+
+            // 3. Yerelden Sil
+            window.localNotes = window.localNotes.filter(n => n.id !== id);
+            window.saveLocalToDisk(false); // false: Tekrar render etme, zaten sildik
+
+            // 4. Buluttan Sil
             if (window.firebaseData.active && !id.startsWith('loc_')) {
-                deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
+                try {
+                    deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
+                } catch(e) { console.error("Silme hatası:", e); }
             }
         };
     </script>
@@ -182,6 +199,13 @@
         .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .line-clamp-4 {
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800">
@@ -197,7 +221,7 @@
             </div>
             
             <div class="flex items-center gap-1">
-                <i data-lucide="cloud" id="cloud-icon" class="w-5 h-5 text-gray-300 mr-2 transition-colors"></i>
+                <i data-lucide="cloud" id="cloud-icon" class="w-5 h-5 text-gray-300 mr-2 transition-colors" title="Bulut Durumu"></i>
                 <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="settings" class="w-5 h-5"></i></button>
                 <button onclick="openWhatsAppMode()" class="p-2 rounded-full hover:bg-green-50 text-green-600"><i data-lucide="smartphone" class="w-5 h-5"></i></button>
                 <button onclick="toggleStealth()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="eye-off" class="w-5 h-5"></i></button>
@@ -241,7 +265,7 @@
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
 
-    <!-- NOT MODALI (TAM EKRAN OKUMA İÇİN OPTİMİZE EDİLDİ) -->
+    <!-- NOT MODALI (TAM EKRAN) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
         <div class="absolute inset-0 md:inset-x-0 md:bottom-6 md:top-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-y-full" id="modal-panel">
@@ -259,9 +283,8 @@
             <!-- Kategori -->
             <div class="px-6 py-3 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-100" id="modal-cats"></div>
 
-            <!-- Editör (Tam Ekran Okuma) -->
+            <!-- Editör -->
             <div class="flex-1 relative bg-white group overflow-y-auto">
-                <!-- min-h-full ve geniş padding ile okuma rahatlığı -->
                 <textarea id="note-content" class="w-full h-full min-h-[50vh] p-6 lg:p-8 resize-none bg-transparent border-none focus:ring-0 text-lg leading-relaxed placeholder-gray-300 font-hand text-gray-700 outline-none" placeholder="Notunuzu buraya yazın..."></textarea>
                 
                 <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
@@ -301,7 +324,7 @@
         </div>
     </div>
 
-    <!-- Diğer Modallar -->
+    <!-- WhatsApp Modal -->
     <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
             <div class="p-4 flex justify-between items-center bg-gray-800">
@@ -327,6 +350,7 @@
         </div>
     </div>
 
+    <!-- Ayarlar Modal -->
     <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl transform transition-all scale-100">
             <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800"><i data-lucide="settings" class="mr-2 text-indigo-600"></i> Ayarlar</h2>
@@ -404,15 +428,18 @@
             }
         };
 
-        window.saveLocalToDisk = () => {
+        window.saveLocalToDisk = (shouldRender = true) => {
             localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
-            render(window.localNotes);
+            if(shouldRender) render(window.localNotes);
         };
 
         window.syncNotes = (cloudNotes) => {
             const noteMap = new Map();
             window.localNotes.forEach(n => noteMap.set(n.id, n));
-            cloudNotes.forEach(n => noteMap.set(n.id, n));
+            // Eğer cloudNotes'ta olmayan ve 'deletedNoteIds' içinde olan varsa, onu yerelden de sil (senkronize silme)
+            cloudNotes.forEach(n => {
+                if (!window.deletedNoteIds.has(n.id)) noteMap.set(n.id, n);
+            });
             window.localNotes = Array.from(noteMap.values());
             window.saveLocalToDisk();
         };
@@ -429,6 +456,10 @@
                 const catClass = `cat-${note.category || 'diger'}`;
                 const fontClass = note.font || 'font-hand';
                 const date = new Date((note.updatedAt?.seconds || note.updatedAt / 1000) * 1000).toLocaleDateString('tr-TR');
+                
+                // DATA ID EKLENDİ
+                el.setAttribute('data-note-id', note.id);
+                
                 el.className = `note-card ${catClass} cursor-pointer flex flex-col h-56 animate-fade-in bg-white group`;
                 el.innerHTML = `
                     <div class="p-5 flex-1 overflow-hidden relative" onclick="openNote('${note.id}')">
@@ -535,11 +566,13 @@
         async function performDelete() {
             if (!noteToDeleteId) return;
             const idToDelete = noteToDeleteId;
-            // 1. Önce Modalı Kapat (Hız için)
-            closeConfirmModal();
-            if (currentNoteId === idToDelete) closeModal();
             
-            // 2. Sonra Sil
+            closeConfirmModal();
+            
+            if (currentNoteId === idToDelete) {
+                closeModal();
+            }
+            
             await window.deleteNoteFromStorage(idToDelete);
             showToast('Not silindi', 'success');
         }
