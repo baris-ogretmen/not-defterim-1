@@ -29,58 +29,53 @@
         // Kayıtlı ayarları kontrol et
         const savedApiKey = localStorage.getItem('fb_api_key');
         const savedAppId = localStorage.getItem('fb_app_id');
-
-        // Kullanıcının sağladığı proje bilgileri
         const defaultProjectId = "sekilli-totem-481514-c5";
         
-        // Yapılandırma oluştur
+        // Yapılandırma
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { 
-            apiKey: savedApiKey || "BURAYA_FIREBASE_API_KEY_GELECEK", 
+            apiKey: savedApiKey || "BURAYA_FIREBASE_API_KEY", 
             authDomain: `${defaultProjectId}.firebaseapp.com`,
             projectId: defaultProjectId,
             storageBucket: `${defaultProjectId}.firebasestorage.app`,
             messagingSenderId: "519295049418",
-            appId: savedAppId || "BURAYA_APP_ID_GELECEK"
+            appId: savedAppId || "BURAYA_APP_ID"
         };
 
         let app, auth, db;
-        let isFirebaseReady = false;
+        window.isFirebaseActive = false; // Firebase durumunu takip et
 
         // Firebase başlatma fonksiyonu
         window.initFirebase = async () => {
-            try {
-                // Eğer daha önce başlatıldıysa tekrar başlatma
-                if (app) return;
+            // Önce yerel verileri yükle (Offline Mod)
+            window.loadLocalNotes();
 
-                // API Key kontrolü (Demo key veya placeholder ise uyarı ver)
+            try {
                 if (firebaseConfig.apiKey.includes("BURAYA") || firebaseConfig.apiKey === "demo") {
-                    console.warn("Firebase API Key eksik.");
-                    showErrorState("Lütfen Ayarlar menüsünden Firebase API Key ve App ID giriniz.");
-                    toggleSettingsModal(); // Ayarları otomatik aç
+                    console.log("Firebase ayarı yok, yerel modda çalışılıyor.");
                     return;
                 }
 
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
-                isFirebaseReady = true;
-
+                
                 // Auth başlat
-                initAuth();
+                await initAuth();
 
-                // Auth listener
                 onAuthStateChanged(auth, (user) => {
                     window.currentUser = user;
                     if (user) {
+                        window.isFirebaseActive = true;
                         initNotesListener(user.uid);
-                    } else {
-                        document.getElementById('notes-container').innerHTML = '';
+                        document.getElementById('cloud-status').classList.remove('text-gray-400');
+                        document.getElementById('cloud-status').classList.add('text-green-500');
+                        showToast("Bulut bağlantısı aktif.", "success");
                     }
                 });
 
             } catch (e) {
-                console.error("Firebase Başlatma Hatası:", e);
-                showErrorState("Firebase bağlantısı kurulamadı. Ayarlarınızı kontrol edin.");
+                console.error("Firebase Hatası:", e);
+                showToast("Bulut bağlanamadı, yerel mod aktif.", "info");
             }
         };
 
@@ -95,10 +90,7 @@
                 } else {
                     await signInAnonymously(auth);
                 }
-            } catch (error) { 
-                console.error("Auth Error:", error);
-                showErrorState("Giriş yapılamadı. API Key geçerli mi?");
-            }
+            } catch (error) { console.error("Auth Error:", error); }
         };
 
         function initNotesListener(userId) {
@@ -107,51 +99,91 @@
             const notesRef = collection(db, 'artifacts', appId, 'users', userId, 'notes');
             
             document.getElementById('loading-state').classList.remove('hidden');
-            document.getElementById('error-state').classList.add('hidden');
-            document.getElementById('notes-container').classList.add('hidden');
 
             unsubscribeNotes = onSnapshot(notesRef, (snapshot) => {
                 const notes = [];
                 snapshot.forEach((doc) => notes.push({ id: doc.id, ...doc.data() }));
-                notes.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                
+                // Firebase'den gelen veriyi yerelle birleştir/güncelle
+                window.syncNotes(notes);
                 
                 document.getElementById('loading-state').classList.add('hidden');
-                document.getElementById('error-state').classList.add('hidden');
-                document.getElementById('notes-container').classList.remove('hidden');
-                
-                window.renderNotes(notes);
             }, (error) => {
                 console.error("Veri hatası:", error);
-                if (error.code === 'permission-denied') {
-                    showErrorState("Erişim reddedildi. Firestore kurallarını kontrol edin.");
-                } else {
-                    showErrorState("Veri çekilemedi. Bağlantı hatası.");
-                }
+                // Hata olsa bile yerel verilerle devam et
+                document.getElementById('loading-state').classList.add('hidden');
             });
         }
 
-        function showErrorState(msg) {
-            document.getElementById('loading-state').classList.add('hidden');
-            const errDiv = document.getElementById('error-state');
-            errDiv.classList.remove('hidden');
-            errDiv.querySelector('p').textContent = msg;
-        }
+        // --- HİBRİT VERİ YÖNETİMİ ---
+        window.localNotes = [];
 
-        // Global Erişimler
-        window.addNoteToDb = async (data) => { 
-            if (!window.currentUser) { showToast("Bağlantı yok, kaydedilemedi!", "error"); return; }
-            await addDoc(collection(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }); 
-        };
-        window.deleteNoteFromDb = async (id) => { 
-            if (!window.currentUser) return;
-            await deleteDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id)); 
-        };
-        window.updateNoteInDb = async (id, data) => { 
-            if (!window.currentUser) return;
-            await updateDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id), { ...data, updatedAt: serverTimestamp() }); 
+        window.loadLocalNotes = () => {
+            const saved = localStorage.getItem('baris_notes_backup');
+            if (saved) {
+                window.localNotes = JSON.parse(saved);
+                window.renderNotes(window.localNotes);
+            }
         };
 
-        // Sayfa yüklendiğinde başlatmayı dene
+        window.saveLocalNotes = () => {
+            localStorage.setItem('baris_notes_backup', JSON.stringify(window.localNotes));
+            window.renderNotes(window.localNotes);
+        };
+
+        window.syncNotes = (cloudNotes) => {
+            // Basit senkronizasyon: Bulut her zaman daha güncel kabul edilir (çakışma kontrolü yok)
+            window.localNotes = cloudNotes;
+            window.saveLocalNotes();
+        };
+
+        // CRUD İşlemleri (Hem Yerel Hem Bulut)
+        window.addNoteToApp = async (data) => {
+            const newNote = { ...data, id: 'local_' + Date.now(), createdAt: { seconds: Date.now() / 1000 }, updatedAt: { seconds: Date.now() / 1000 } };
+            
+            // 1. Yerele Ekle
+            window.localNotes.push(newNote);
+            window.saveLocalNotes();
+
+            // 2. Buluta Ekle (Varsa)
+            if (window.isFirebaseActive && window.currentUser) {
+                try {
+                    // ID'siz gönder, Firebase ID versin (Sonra update ile eşleştirmek daha doğru olur ama basitlik için böyle bırakıyoruz)
+                    await addDoc(collection(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes'), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                } catch(e) { console.error("Buluta eklenemedi", e); }
+            }
+        };
+
+        window.deleteNoteApp = async (id) => {
+            // 1. Yerelden Sil
+            window.localNotes = window.localNotes.filter(n => n.id !== id);
+            window.saveLocalNotes();
+
+            // 2. Buluttan Sil (Eğer ID local_ ile başlamıyorsa, yani bulut ID'siyse)
+            if (window.isFirebaseActive && window.currentUser && !id.startsWith('local_')) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id));
+                } catch(e) { console.error("Buluttan silinemedi", e); }
+            }
+        };
+
+        window.updateNoteApp = async (id, data) => {
+            // 1. Yerelde Güncelle
+            const idx = window.localNotes.findIndex(n => n.id === id);
+            if (idx > -1) {
+                window.localNotes[idx] = { ...window.localNotes[idx], ...data, updatedAt: { seconds: Date.now() / 1000 } };
+                window.saveLocalNotes();
+            }
+
+            // 2. Bulutta Güncelle
+            if (window.isFirebaseActive && window.currentUser && !id.startsWith('local_')) {
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', window.currentUser.uid, 'notes', id), { ...data, updatedAt: serverTimestamp() });
+                } catch(e) { console.error("Bulut güncellenemedi", e); }
+            }
+        };
+
+        // Başlat
         window.initFirebase();
     </script>
 
@@ -277,10 +309,12 @@
             </div>
             
             <div class="flex items-center space-x-2">
-                <!-- Ayarlar (Önemli: Kırmızı yanarsa dikkat çek) -->
-                <button onclick="toggleSettingsModal()" id="settings-btn" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors relative" title="Ayarlar">
+                <!-- Bulut Durumu İkonu -->
+                <i data-lucide="cloud" id="cloud-status" class="w-5 h-5 text-gray-300 transition-colors" title="Bulut Bağlantısı"></i>
+
+                <!-- Ayarlar -->
+                <button onclick="toggleSettingsModal()" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors relative" title="Ayarlar">
                     <i data-lucide="settings" class="w-5 h-5"></i>
-                    <span id="settings-alert" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full hidden animate-ping"></span>
                 </button>
 
                 <!-- WhatsApp Stüdyosu (Ana Menü) -->
@@ -335,12 +369,6 @@
         <div id="loading-state" class="flex flex-col items-center justify-center py-20 hidden">
             <div class="loader mb-4"></div>
             <p class="text-gray-500 text-sm">Notlarınız getiriliyor...</p>
-        </div>
-
-        <div id="error-state" class="flex flex-col items-center justify-center py-20 hidden text-red-500">
-            <i data-lucide="wifi-off" class="w-12 h-12 mb-2 opacity-50"></i>
-            <p class="text-sm font-bold text-center">Bağlantı hatası.</p>
-            <button onclick="toggleSettingsModal()" class="mt-2 text-xs bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded-full">Ayarları Kontrol Et</button>
         </div>
 
         <!-- Notlar Alanı -->
@@ -426,12 +454,28 @@
     <div id="settings-modal" class="fixed inset-0 z-[60] hidden">
         <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onclick="toggleSettingsModal()"></div>
         <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="settings" class="w-5 h-5 mr-2 text-indigo-600"></i> Uygulama Ayarları</h2>
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center"><i data-lucide="settings" class="w-5 h-5 mr-2 text-indigo-600"></i> Ayarlar</h2>
             
+            <!-- Yedekleme Alanı (YENİ) -->
+            <div class="mb-6 p-4 bg-green-50 rounded-xl border border-green-200">
+                <h3 class="text-sm font-bold text-green-700 mb-2 flex items-center"><i data-lucide="archive" class="w-4 h-4 mr-1"></i> Veri Yedekleme</h3>
+                <p class="text-xs text-gray-500 mb-3">Notlarınızı kaybetmemek için düzenli yedek alın.</p>
+                
+                <div class="flex gap-2">
+                    <button onclick="exportData()" class="flex-1 flex items-center justify-center px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+                        <i data-lucide="download" class="w-4 h-4 mr-2"></i> Yedeği İndir
+                    </button>
+                    <button onclick="document.getElementById('import-file').click()" class="flex-1 flex items-center justify-center px-3 py-2 bg-white border border-green-600 text-green-600 hover:bg-green-50 rounded-lg text-xs font-bold shadow-sm transition-colors">
+                        <i data-lucide="upload" class="w-4 h-4 mr-2"></i> Yedeği Yükle
+                    </button>
+                    <input type="file" id="import-file" class="hidden" accept=".json" onchange="importData(this)">
+                </div>
+            </div>
+
             <!-- Firebase Ayarları -->
             <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="database" class="w-4 h-4 mr-1"></i> Veritabanı Bağlantısı</h3>
-                <p class="text-xs text-gray-500 mb-3">Bu uygulamayı indirip kullanmak için Firebase API Key ve App ID girmelisiniz.</p>
+                <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center"><i data-lucide="database" class="w-4 h-4 mr-1"></i> Veritabanı Bağlantısı (Opsiyonel)</h3>
+                <p class="text-xs text-gray-500 mb-3">Bulut yedekleme için Firebase API Key ve App ID giriniz.</p>
                 
                 <div class="space-y-3">
                     <div>
@@ -572,17 +616,62 @@
             
             const fbAppId = localStorage.getItem('fb_app_id');
             if(fbAppId) document.getElementById('fb-app-id-input').value = fbAppId;
-            
-            // Eğer config eksikse ayarları aç
-            const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "BURAYA" };
-            if(config.apiKey.includes("BURAYA") && !fbApiKey) {
-                document.getElementById('settings-alert').classList.remove('hidden');
-            }
         });
+
+        // --- YEDEKLEME (IMPORT / EXPORT) ---
+        window.exportData = () => {
+            if (window.localNotes.length === 0) {
+                showToast("Yedeklenecek not bulunamadı!", "warning");
+                return;
+            }
+            const dataStr = JSON.stringify(window.localNotes, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            const date = new Date().toISOString().slice(0,10);
+            a.download = `baris-notlari-yedek-${date}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("Yedek dosyası indirildi!", "success");
+        };
+
+        window.importData = (input) => {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importedNotes = JSON.parse(e.target.result);
+                    if (Array.isArray(importedNotes)) {
+                        // Mevcut notlarla birleştir (basit birleştirme)
+                        window.localNotes = [...window.localNotes, ...importedNotes];
+                        // Tekrarları ID'ye göre temizle
+                        const uniqueNotes = Array.from(new Map(window.localNotes.map(note => [note.id, note])).values());
+                        window.localNotes = uniqueNotes;
+                        
+                        window.saveLocalNotes();
+                        showToast(`${importedNotes.length} not başarıyla yüklendi!`, "success");
+                        // Sayfayı yenilemeye gerek yok, render yeterli ama garanti olsun
+                        window.location.reload();
+                    } else {
+                        showToast("Geçersiz yedek dosyası formatı.", "error");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast("Dosya okuma hatası.", "error");
+                }
+            };
+            reader.readAsText(file);
+        };
 
         // --- Render ---
         window.renderNotes = (notes) => {
-            allNotes = notes;
+            allNotes = notes; // Bu global değişkeni de güncelle
             const container = document.getElementById('notes-container');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
             container.innerHTML = '';
@@ -624,6 +713,13 @@
 
                         let preview = note.content || '';
                         if(preview.length > 120) preview = preview.substring(0, 120) + '...';
+                        
+                        // Tarih işlemesi (Hem Timestamp hem yerel Date desteği)
+                        let dateStr = "Yeni";
+                        if(note.updatedAt) {
+                            const secs = note.updatedAt.seconds || (new Date(note.updatedAt).getTime() / 1000);
+                            dateStr = new Date(secs * 1000).toLocaleDateString('tr-TR', {day:'numeric', month:'short'});
+                        }
 
                         div.innerHTML = `
                             <div class="tape"></div>
@@ -634,7 +730,7 @@
                             </button>
 
                             <div class="card-header p-4 pt-6 pb-2 relative">
-                                <span class="text-[10px] font-bold opacity-60 block text-right mr-6">${new Date(note.updatedAt?.seconds * 1000).toLocaleDateString('tr-TR', {day:'numeric', month:'short'})}</span>
+                                <span class="text-[10px] font-bold opacity-60 block text-right mr-6">${dateStr}</span>
                                 <h3 class="font-bold text-lg leading-tight font-caveat tracking-wide mt-1 pr-4">${note.title || 'İsimsiz Not'}</h3>
                             </div>
                             <div class="p-4 flex-1 overflow-hidden relative">
@@ -789,7 +885,7 @@
                     content: text,
                     category: 'diger' 
                 };
-                window.addNoteToDb(noteData);
+                window.addNoteToApp(noteData);
                 closeWhatsAppMode();
                 showToast("Durum notlara kaydedildi.", "success");
             }
@@ -826,10 +922,10 @@
                     b.classList.remove('bg-white');
                 }
             });
-            renderNotes(allNotes);
+            renderNotes(allNotes); // allNotes artık localNotes olabilir, sorun yok
         }
 
-        function searchNotes() { renderNotes(allNotes); }
+        function searchNotes() { renderNotes(window.localNotes); } // Local'den ara
 
         function toggleNewNoteModal(keepContent = false) {
             document.getElementById('note-id').value = '';
@@ -897,8 +993,8 @@
             if(!content && !title) { showToast("Boş not olmaz!", "warning"); return; }
             
             const noteData = { title, content, category: selectedCategory };
-            if(id) await window.updateNoteInDb(id, noteData);
-            else await window.addNoteToDb(noteData);
+            if(id) await window.updateNoteApp(id, noteData);
+            else await window.addNoteToApp(noteData);
             closeModal();
             showToast("Kaydedildi!", "success");
         }
@@ -923,7 +1019,7 @@
 
         async function performDelete() {
             if (noteToDeleteId) {
-                await window.deleteNoteFromDb(noteToDeleteId);
+                await window.deleteNoteApp(noteToDeleteId);
                 const editModal = document.getElementById('note-modal');
                 if (!editModal.classList.contains('hidden')) { closeModal(); }
                 showToast("Not başarıyla silindi.", "info");
@@ -1021,3 +1117,5 @@
     </script>
 </body>
 </html>
+
+
