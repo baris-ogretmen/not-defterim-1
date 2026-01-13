@@ -21,7 +21,7 @@
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.firebaseData = { db: null, auth: null, user: null, active: false };
-        window.deletedNoteIds = new Set();
+        window.deletedNoteIds = new Set(); // Silinenleri takip et
 
         const savedApiKey = localStorage.getItem('fb_api_key');
         const savedAppId = localStorage.getItem('fb_app_id');
@@ -37,7 +37,7 @@
         };
 
         async function initApp() {
-            window.loadLocalNotes();
+            window.loadLocalNotes(); // Hızlı açılış için yerel veriyi yükle
 
             if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
                 console.log("Yerel mod.");
@@ -75,6 +75,7 @@
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const cloudNotes = [];
                 snapshot.forEach(d => {
+                    // Eğer bu not silinenler listesinde değilse al
                     if (!window.deletedNoteIds.has(d.id)) {
                         cloudNotes.push({ id: d.id, ...d.data() });
                     }
@@ -86,47 +87,57 @@
         initApp();
 
         window.saveNoteToStorage = async (note) => {
-            // Eğer ID yoksa (Yeni Not), oluştur. Varsa aynısını kullan.
-            const noteId = note.id || 'loc_' + Date.now();
-            const localNote = { ...note, id: noteId, updatedAt: Date.now() };
+            // 1. Yerel Kayıt (Hız için)
+            // Eğer yeni not ise 'loc_' ile başlayan geçici ID ver
+            const tempId = note.id && note.id.startsWith('loc_') ? note.id : 'loc_' + Date.now();
+            const finalId = note.id && !note.id.startsWith('loc_') ? note.id : tempId;
             
-            window.deletedNoteIds.delete(localNote.id);
+            const localNote = { ...note, id: finalId, updatedAt: Date.now(), tempId: tempId };
             
-            // Yerel güncelleme (Duplicate Önleme)
-            const existingIdx = window.localNotes.findIndex(n => n.id === noteId);
-            if (existingIdx > -1) {
-                window.localNotes[existingIdx] = localNote;
-            } else {
-                window.localNotes.push(localNote);
-            }
+            // Eğer bu ID silinenler listesindeyse çıkar (geri geldi çünkü)
+            window.deletedNoteIds.delete(finalId);
+            
+            // Yerele ekle/güncelle
+            const existingIdx = window.localNotes.findIndex(n => n.id === finalId);
+            if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
+            else window.localNotes.push(localNote);
+            
             window.saveLocalToDisk();
 
-            // ID'yi geri döndür ki UI güncelleyebilsin
-            return noteId;
-
-            // Bulut işlemleri (Async)
+            // 2. Bulut Kayıt
             if (window.firebaseData.active) {
                 const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
-                // Eğer ID 'loc_' ile başlamıyorsa (zaten bulutta varsa) güncelle
-                if (noteId && !noteId.startsWith('loc_')) {
-                    updateDoc(doc(col, noteId), { ...note, updatedAt: serverTimestamp() });
+                
+                if (finalId.startsWith('loc_')) {
+                    // Yeni kayıt: tempId'yi de gönder ki dönüşte eşleştirebilelim
+                    addDoc(col, { ...note, tempId: tempId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
                 } else {
-                    // Bulutta yoksa ekle (Burada ID senkronizasyonu karmaşıklaşabilir, basitleştirilmiş hali)
-                    // Gerçek bir app'te local ID ile cloud ID maplenmeli. 
-                    // Şimdilik sadece buluta gönderiyoruz.
-                    // addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                    // Güncelleme
+                    updateDoc(doc(col, finalId), { ...note, updatedAt: serverTimestamp() });
                 }
             }
+            
+            return finalId;
         };
 
         window.deleteNoteFromStorage = async (id) => {
+            // 1. Kara listeye al (Zombi notları engelle)
             window.deletedNoteIds.add(id);
-            const noteEl = document.querySelector(`[data-note-id="${id}"]`);
-            if (noteEl) noteEl.remove();
 
+            // 2. Görsel olarak anında yok et
+            const card = document.querySelector(`[data-note-id="${id}"]`);
+            if(card) {
+                card.style.transition = "all 0.3s";
+                card.style.opacity = "0";
+                card.style.transform = "scale(0.9)";
+                setTimeout(() => card.remove(), 300);
+            }
+
+            // 3. Veriden sil
             window.localNotes = window.localNotes.filter(n => n.id !== id);
-            window.saveLocalToDisk(false);
+            window.saveLocalToDisk(false); // Tekrar render etme, zaten sildik
 
+            // 4. Buluttan sil
             if (window.firebaseData.active && !id.startsWith('loc_')) {
                 try {
                     deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
@@ -148,11 +159,12 @@
         .font-mono { font-family: 'Courier Prime', monospace; }
         .font-sans { font-family: 'Inter', sans-serif; }
 
+        /* Kart Stilleri */
         .note-card {
             transition: transform 0.2s, box-shadow 0.2s;
             position: relative;
             border-radius: 16px;
-            overflow: hidden; /* Scrollbar'ın köşeleri taşmasın */
+            overflow: hidden;
             border: 1px solid rgba(0,0,0,0.05);
         }
         .note-card:hover {
@@ -161,11 +173,14 @@
             z-index: 10;
         }
 
-        /* Özel Scrollbar */
-        .card-scroll::-webkit-scrollbar { width: 6px; }
-        .card-scroll::-webkit-scrollbar-track { background: transparent; }
-        .card-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 20px; }
-        .card-scroll:hover::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); }
+        /* Kart İçi Scrollbar */
+        .card-scroll {
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0,0,0,0.1) transparent;
+        }
+        .card-scroll::-webkit-scrollbar { width: 4px; }
+        .card-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 4px; }
 
         /* Kategori Renkleri */
         .cat-tarih { background: #fee2e2; border-top: 5px solid #ef4444; }
@@ -186,25 +201,25 @@
         }
         .fab:active { transform: scale(0.90); }
 
-        /* Rich Text Div */
+        /* Vurgular */
+        .highlight-important { color: #c2410c; font-weight: 700; background-color: #ffedd5; padding: 0 2px; border-radius: 2px; }
+        .highlight-blue { color: #1d4ed8; font-weight: 600; }
+
+        /* Rich Text Placeholders */
         [contenteditable]:empty:before {
             content: attr(placeholder);
             color: #9ca3af;
-            display: block; /* For Firefox */
+            display: block;
         }
-        
-        /* Renkli Vurgular */
-        .highlight-important { color: #c2410c; font-weight: 700; background-color: #ffedd5; padding: 0 2px; border-radius: 2px; }
-        .highlight-blue { color: #1d4ed8; font-weight: 600; }
 
         body.stealth-mode { background: #000 !important; overflow: hidden; }
         body.stealth-mode header, body.stealth-mode main, body.stealth-mode .fab { opacity: 0; pointer-events: none; }
         body.stealth-mode #stealth-overlay { display: flex; }
 
-        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
-        .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 100% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } }
+        .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800">
@@ -245,13 +260,11 @@
     <!-- Ana Alan -->
     <main class="flex-1 overflow-y-auto p-4 pb-24">
         <div class="max-w-5xl mx-auto space-y-6">
-            <!-- Arama -->
             <div class="relative group">
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
                 <input type="text" id="searchInput" onkeyup="search()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
             </div>
 
-            <!-- Liste -->
             <div id="notes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             
             <div id="empty-state" class="hidden text-center py-20 opacity-50">
@@ -266,7 +279,7 @@
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
 
-    <!-- NOT DÜZENLEME MODALI -->
+    <!-- NOT MODALI (Tam Ekran) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
         <div class="absolute inset-0 md:inset-x-0 md:bottom-6 md:top-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-transform duration-300 translate-y-full" id="modal-panel">
@@ -284,14 +297,13 @@
             <!-- Kategori -->
             <div class="px-6 py-3 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-100" id="modal-cats"></div>
 
-            <!-- Editör (Rich Text Div) -->
+            <!-- Editör -->
             <div class="flex-1 relative bg-white group overflow-y-auto">
-                <!-- contenteditable ile renkli HTML desteği -->
                 <div id="note-content" contenteditable="true" class="w-full h-full min-h-[50vh] p-6 lg:p-8 outline-none text-lg leading-relaxed font-hand text-gray-700" placeholder="Notunuzu buraya yazın..."></div>
                 
                 <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
                     <div class="loader mb-3"></div>
-                    <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Çalışıyor...</p>
+                    <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
                 </div>
             </div>
 
@@ -430,17 +442,31 @@
             }
         };
 
-        window.saveLocalToDisk = () => {
+        window.saveLocalToDisk = (shouldRender = true) => {
             localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
-            render(window.localNotes);
+            if(shouldRender) render(window.localNotes);
         };
 
         window.syncNotes = (cloudNotes) => {
+            // DUPLICATE ÇÖZÜMÜ: tempId eşleşmesi
             const noteMap = new Map();
+            
+            // Önce yerel notları ekle
             window.localNotes.forEach(n => noteMap.set(n.id, n));
-            cloudNotes.forEach(n => {
-                if (!window.deletedNoteIds.has(n.id)) noteMap.set(n.id, n);
+            
+            cloudNotes.forEach(cloudNote => {
+                // Eğer cloud'dan gelen notun bir tempId'si varsa ve bu tempId yereldeki bir notla eşleşiyorsa
+                if (cloudNote.tempId && noteMap.has(cloudNote.tempId)) {
+                    // Yereldeki geçici notu sil (Çünkü artık cloud versiyonu var)
+                    noteMap.delete(cloudNote.tempId);
+                }
+                
+                // Silinenler listesinde değilse ekle
+                if (!window.deletedNoteIds.has(cloudNote.id)) {
+                    noteMap.set(cloudNote.id, cloudNote);
+                }
             });
+            
             window.localNotes = Array.from(noteMap.values());
             window.saveLocalToDisk();
         };
@@ -461,26 +487,24 @@
                 el.setAttribute('data-note-id', note.id);
                 el.className = `note-card ${catClass} flex flex-col h-56 animate-fade-in bg-white group`;
                 
-                // NOT İÇERİĞİNİ GÖSTEREN KART
                 el.innerHTML = `
                     <div class="p-5 flex-1 overflow-hidden relative flex flex-col">
-                        <!-- Düzenle (Edit) Butonu -->
-                        <button onclick="openNote('${note.id}')" class="absolute top-2 right-2 text-indigo-500 bg-white/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-100 z-20 shadow-sm" title="Düzenle">
+                        <!-- Düzenle Butonu -->
+                        <button onclick="event.stopPropagation(); openNote('${note.id}')" class="absolute top-2 right-2 text-indigo-500 bg-white/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-100 z-20 shadow-sm" title="Düzenle">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
                         
-                        <!-- Sil Butonu (Yeri Değişti: Sol Üst) -->
-                        <button onclick="deleteNoteFromCard('${note.id}')" class="absolute top-2 left-2 text-red-400 bg-white/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 z-20 shadow-sm" title="Sil">
+                        <!-- Sil Butonu -->
+                        <button onclick="event.stopPropagation(); deleteNoteFromCard('${note.id}')" class="absolute top-2 left-2 text-red-400 bg-white/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 z-20 shadow-sm" title="Sil">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
 
-                        <div class="flex justify-between items-start mb-2 pr-8 pl-8">
+                        <div class="flex justify-between items-start mb-2 pr-8 pl-8 pointer-events-none">
                             <h3 class="font-bold text-lg leading-tight line-clamp-2">${note.title || 'Başlıksız'}</h3>
                         </div>
                         
                         <!-- Kaydırılabilir İçerik Alanı -->
-                        <div class="flex-1 overflow-y-auto card-scroll pr-2 relative z-10">
-                            <!-- İçeriği HTML Olarak Render Et (Renkli Vurgu İçin) -->
+                        <div class="flex-1 overflow-y-auto card-scroll pr-2 relative z-10" onmousedown="event.stopPropagation()">
                             <div class="text-sm opacity-90 ${fontClass} text-gray-800 break-words">${note.content || ''}</div>
                         </div>
 
@@ -566,17 +590,15 @@
             const title = document.getElementById('note-title').value.trim();
             const content = document.getElementById('note-content').innerHTML; // HTML al
             
-            // Boşluk kontrolü (HTML etiketleri hariç metin var mı?)
             if (!title && !document.getElementById('note-content').innerText.trim()) return showToast('Boş not kaydedilemez', 'error');
             
             const noteData = { id: currentNoteId, title, content, category: currentCat, font: currentFont };
             
-            // ID güncellensin (Duplicate fix)
+            // ID güncellensin
             const savedId = await window.saveNoteToStorage(noteData);
             currentNoteId = savedId; 
             
             showToast('Kaydedildi', 'success');
-            // Modal açık kalsın, kapatmıyoruz. Kullanıcı isterse kapatır.
         }
 
         function openConfirmModal(id) {
@@ -606,7 +628,7 @@
         async function runAI(action) {
             toggleAiMenu();
             const contentDiv = document.getElementById('note-content');
-            const contentText = contentDiv.innerText; // Sadece metni al
+            const contentText = contentDiv.innerText; 
             
             if(!contentText.trim()) return showToast("Önce bir şeyler yazmalısın!", "error");
             const apiKey = localStorage.getItem('gemini_api_key');
@@ -616,13 +638,14 @@
             document.getElementById('ai-loading').classList.add('flex');
 
             let prompt = "";
-            // Promptlar: HTML çıktısı iste
             const htmlInstruction = "Cevabı HTML formatında ver (<html> etiketi olmadan, sadece içerik). Önemli yerleri <span class='highlight-important'>bu şekilde</span>, ikincil önemli yerleri <span class='highlight-blue'>bu şekilde</span> vurgula. Satır sonlarına <br> koy.";
 
             if (action === 'fix') prompt = `Bu metni Türkçe imla kurallarına göre düzelt: ${contentText}. ${htmlInstruction}`;
             else if (action === 'summarize') prompt = `Bu metni Türkçe özetle: ${contentText}. ${htmlInstruction}`;
             else if (action === 'expand') prompt = `Bu metni genişlet: ${contentText}. ${htmlInstruction}`;
             else if (action === 'continue') prompt = `Devamını getir (2-3 cümle): ${contentText}. Sadece eklediğin kısmı ver. ${htmlInstruction}`;
+            else if (action === 'formal') prompt = `Resmi dille yaz: ${contentText}. ${htmlInstruction}`;
+            else if (action === 'keypoints') prompt = `Ana fikirleri çıkar: ${contentText}. ${htmlInstruction}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için kısalt, emoji ekle, renk seç (1-5). Format: METİN|||RENK_NO. Metin: ${contentText}`;
 
             try {
@@ -644,9 +667,9 @@
                     document.getElementById('wp-modal').classList.remove('hidden');
                 } else {
                     if (action === 'continue') {
-                        contentDiv.innerHTML += " " + result; // HTML ekle
+                        contentDiv.innerHTML += " " + result;
                     } else {
-                        contentDiv.innerHTML = result; // HTML değiştir
+                        contentDiv.innerHTML = result;
                     }
                 }
                 showToast("Tamamlandı!", "success");
@@ -690,7 +713,7 @@
                     for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
                     if(final) {
                         const el = document.getElementById('note-content');
-                        el.innerHTML += (el.innerHTML ? ' ' : '') + final; // HTML append
+                        el.innerHTML += (el.innerHTML ? ' ' : '') + final;
                         if(isListening && document.body.classList.contains('stealth-mode')) document.getElementById('stealth-text').innerText = final;
                     }
                 };
