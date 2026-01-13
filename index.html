@@ -14,182 +14,478 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    <script>
+        // --- AYARLAR & VERİ YÖNETİMİ ---
+        const STORAGE_KEY = 'baris_final_notes_v2'; // Benzersiz anahtar
+        
+        // Uygulama Durumu
+        let notes = [];
+        let currentFilter = 'all';
+        let currentNoteId = null;
+        let noteToDeleteId = null;
+        let isListening = false;
+        let recognition = null;
+        let currentFont = 'font-hand';
+        let currentCat = 'guncel';
 
-        // Global Değişkenler
-        window.firebaseData = { db: null, auth: null, user: null, active: false };
-        window.localNotes = [];
-        // Silinenleri kalıcı hafızada tut
-        window.deletedIds = JSON.parse(localStorage.getItem('baris_deleted_ids') || "[]");
-
-        const savedApiKey = localStorage.getItem('fb_api_key');
-        const savedAppId = localStorage.getItem('fb_app_id');
-        const defaultProject = "sekilli-totem-481514-c5";
-
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { 
-            apiKey: savedApiKey || "DEMO_KEY", 
-            authDomain: `${defaultProject}.firebaseapp.com`,
-            projectId: defaultProject,
-            storageBucket: `${defaultProject}.firebasestorage.app`,
-            messagingSenderId: "519295049418",
-            appId: savedAppId || "DEMO_APP_ID"
+        const CATEGORIES = { 
+            'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 
+            'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 
+            'kisisel': 'Kişisel', 'diger': 'Diğer' 
         };
 
-        async function initApp() {
-            // Önce yerel veriyi yükle ve render et
-            window.loadLocalNotes();
+        // --- BAŞLATMA ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadNotes();
+            setupVoice();
+            lucide.createIcons();
+            
+            // API Anahtarını Yükle
+            const key = localStorage.getItem('gemini_api_key');
+            if(key) document.getElementById('gemini-key').value = key;
+        });
 
-            if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
-                console.log("Yerel modda çalışılıyor.");
+        // --- TEMEL FONKSİYONLAR ---
+
+        function loadNotes() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                try { notes = JSON.parse(raw); } catch (e) { notes = []; }
+            } else {
+                notes = [];
+            }
+            renderNotes();
+        }
+
+        function saveToDisk() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+            renderNotes(); // Ekranı güncelle
+        }
+
+        // --- CRUD İŞLEMLERİ (Kusursuz) ---
+
+        function saveCurrentNote() {
+            const title = document.getElementById('note-title').value.trim();
+            // İçeriği HTML olarak al (Renkli vurgular için)
+            const contentHTML = document.getElementById('note-content').innerHTML;
+            const contentText = document.getElementById('note-content').innerText.trim();
+
+            if (!title && !contentText) {
+                showToast("Boş not kaydedilemez!", "error");
                 return;
             }
 
-            try {
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
-                const db = getFirestore(app);
+            const timestamp = Date.now();
+
+            if (currentNoteId) {
+                // GÜNCELLEME
+                const index = notes.findIndex(n => n.id === currentNoteId);
+                if (index > -1) {
+                    notes[index] = {
+                        ...notes[index],
+                        title: title,
+                        content: contentHTML, // HTML sakla
+                        category: currentCat,
+                        font: currentFont,
+                        updatedAt: timestamp
+                    };
+                }
+            } else {
+                // YENİ NOT
+                const newId = 'note_' + timestamp + '_' + Math.random().toString(36).substr(2, 9);
+                const newNote = {
+                    id: newId,
+                    title: title,
+                    content: contentHTML,
+                    category: currentCat,
+                    font: currentFont,
+                    createdAt: timestamp,
+                    updatedAt: timestamp
+                };
+                notes.push(newNote);
+                currentNoteId = newId; // ID'yi set et ki tekrar basarsa güncelleme yapsın (Duplicate önleme)
                 
-                window.firebaseData.auth = auth;
-                window.firebaseData.db = db;
+                // Silme butonunu görünür yap
+                document.getElementById('btn-delete').classList.remove('hidden');
+                // Fonksiyonu yeni ID ile güncelle
+                document.getElementById('btn-delete').onclick = function() { initiateDelete(newId); };
+            }
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                onAuthStateChanged(auth, (user) => {
-                    window.firebaseData.user = user;
-                    if (user) {
-                        window.firebaseData.active = true;
-                        document.getElementById('cloud-icon').classList.replace('text-gray-300', 'text-green-500');
-                        initLiveListener(user.uid);
-                    }
-                });
-            } catch (e) { console.error("Firebase Hatası:", e); }
+            saveToDisk();
+            showToast("Not başarıyla kaydedildi.", "success");
         }
 
-        let unsubscribe = null;
-        function initLiveListener(uid) {
-            if (unsubscribe) unsubscribe();
-            const q = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', uid, 'notes');
+        function initiateDelete(id) {
+            noteToDeleteId = id;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        }
+
+        function confirmDeleteAction() {
+            if (!noteToDeleteId) return;
+
+            // Diziden sil
+            notes = notes.filter(n => n.id !== noteToDeleteId);
+            saveToDisk();
+
+            // Eğer silinen not şu an açıksa modalı kapat
+            if (currentNoteId === noteToDeleteId) {
+                closeModal();
+            }
+
+            // Kartı DOM'dan manuel de silebiliriz ama renderNotes zaten hallediyor
+            closeConfirmModal();
+            showToast("Not tamamen silindi.", "success");
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            noteToDeleteId = null;
+        }
+
+        // --- RENDER (GÖRÜNTÜLEME) ---
+        function renderNotes() {
+            const grid = document.getElementById('notes-grid');
+            const empty = document.getElementById('empty-state');
+            const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
+            grid.innerHTML = '';
+
+            const filtered = notes.filter(n => {
+                const inCat = currentFilter === 'all' || n.category === currentFilter;
+                // Basit arama (HTML taglerini yoksaymak zor ama idare eder)
+                const inSearch = (n.title + n.content).toLowerCase().includes(searchVal);
+                return inCat && inSearch;
+            }).sort((a, b) => b.updatedAt - a.updatedAt);
+
+            if (filtered.length === 0) {
+                empty.classList.remove('hidden');
+            } else {
+                empty.classList.add('hidden');
+            }
+
+            filtered.forEach(note => {
+                const date = new Date(note.updatedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+                const catClass = `cat-${note.category || 'diger'}`;
+                const fontClass = note.font || 'font-hand';
+
+                const card = document.createElement('div');
+                card.className = `note-card ${catClass} flex flex-col h-60 bg-white group animate-fade-in relative`;
+                
+                // Kart Tıklama -> Notu Aç
+                card.onclick = (e) => {
+                    // Eğer metin seçiliyorsa açma (kullanıcı kopyalama yapıyor olabilir)
+                    if (window.getSelection().toString().length > 0) return;
+                    openNote(note.id);
+                };
+
+                card.innerHTML = `
+                    <div class="p-5 flex-1 flex flex-col h-full relative">
+                        <!-- Üst Kısım: Başlık ve Butonlar -->
+                        <div class="flex justify-between items-start mb-2 pr-8 relative z-20">
+                            <h3 class="font-bold text-lg leading-tight line-clamp-2 text-gray-900">${note.title || 'Başlıksız'}</h3>
+                        </div>
+
+                        <!-- Hızlı İşlem Butonları (Hover ile görünür) -->
+                        <div class="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-30">
+                            <button onclick="event.stopPropagation(); openNote('${note.id}')" class="p-1.5 bg-white/90 text-indigo-600 rounded-full shadow-sm hover:bg-indigo-50" title="Düzenle">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="event.stopPropagation(); initiateDelete('${note.id}')" class="p-1.5 bg-white/90 text-red-500 rounded-full shadow-sm hover:bg-red-50" title="Sil">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- İçerik (Kaydırılabilir) -->
+                        <div class="flex-1 overflow-y-auto card-scroll relative z-10" onmousedown="event.stopPropagation()">
+                            <div class="text-sm opacity-90 ${fontClass} text-gray-800 break-words">${note.content}</div>
+                        </div>
+
+                        <!-- Alt Bilgi -->
+                        <div class="pt-3 mt-2 border-t border-black/5 flex justify-between items-end pointer-events-none">
+                            <span class="text-[10px] uppercase font-bold opacity-60 border border-current px-2 py-0.5 rounded tracking-wide">${CATEGORIES[note.category]}</span>
+                            <span class="text-xs opacity-50 font-medium">${date}</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        // --- UI İŞLEMLERİ ---
+        function filter(cat) {
+            currentFilter = cat;
+            document.querySelectorAll('.cat-btn').forEach(b => {
+                b.classList.remove('bg-gray-800', 'text-white');
+                b.classList.add('bg-white', 'text-gray-600');
+            });
+            // Tıklanan butonu bul ve aktif yap
+            const clickedBtn = event.target;
+            if(clickedBtn) {
+                clickedBtn.classList.remove('bg-white', 'text-gray-600');
+                clickedBtn.classList.add('bg-gray-800', 'text-white');
+            }
+            renderNotes();
+        }
+
+        function openNote(id) {
+            const note = notes.find(n => n.id === id);
+            if (!note) return;
+
+            currentNoteId = id;
+            document.getElementById('note-title').value = note.title;
+            document.getElementById('note-content').innerHTML = note.content; // HTML
             
-            unsubscribe = onSnapshot(q, (snapshot) => {
-                const cloudNotes = [];
-                snapshot.forEach(d => {
-                    // ID Kara listede ise ASLA alma
-                    if (!window.deletedIds.includes(d.id)) {
-                        cloudNotes.push({ id: d.id, ...d.data() });
-                    }
-                });
-                window.syncNotes(cloudNotes);
+            // Silme butonunu ayarla
+            const delBtn = document.getElementById('btn-delete');
+            delBtn.classList.remove('hidden');
+            delBtn.onclick = function() { initiateDelete(id); };
+
+            setCategory(note.category || 'guncel');
+            setFont(note.font || 'font-hand');
+            
+            showModal();
+        }
+
+        function openNewNote() {
+            currentNoteId = null;
+            document.getElementById('note-title').value = '';
+            document.getElementById('note-content').innerHTML = '';
+            document.getElementById('btn-delete').classList.add('hidden');
+            
+            setCategory('guncel');
+            setFont('font-hand');
+            
+            showModal();
+        }
+
+        function showModal() {
+            document.getElementById('note-modal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
+        }
+
+        function closeModal() {
+            document.getElementById('modal-panel').classList.add('translate-y-full');
+            setTimeout(() => {
+                document.getElementById('note-modal').classList.add('hidden');
+                document.getElementById('ai-popup').classList.add('hidden');
+                if(isListening) toggleVoice();
+            }, 300);
+        }
+
+        function setCategory(catKey) {
+            currentCat = catKey;
+            const container = document.getElementById('modal-cats');
+            container.innerHTML = '';
+            Object.keys(CATEGORIES).forEach(k => {
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${k === currentCat ? 'bg-gray-800 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`;
+                btn.innerText = CATEGORIES[k];
+                btn.onclick = () => setCategory(k);
+                container.appendChild(btn);
             });
         }
 
-        initApp();
+        function setFont(fontClass) {
+            currentFont = fontClass;
+            const editor = document.getElementById('note-content');
+            editor.className = `w-full h-full min-h-[50vh] p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
+        }
 
-        // --- VERİ YÖNETİMİ ---
+        // --- YEDEKLEME ---
+        function exportBackup() {
+            if (notes.length === 0) return showToast("Yedeklenecek not yok.", "error");
+            const dataStr = JSON.stringify(notes, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `baris_yedek_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast("Yedek indirildi. Bunu saklayın!", "success");
+        }
 
-        window.loadLocalNotes = () => {
-            const saved = localStorage.getItem('baris_notes');
-            if (saved) {
-                window.localNotes = JSON.parse(saved);
-                // Silinmişleri yerelden de temizle (Güvenlik önlemi)
-                window.localNotes = window.localNotes.filter(n => !window.deletedIds.includes(n.id));
-                render(window.localNotes);
-            }
-        };
+        function triggerImport() { document.getElementById('import-file').click(); }
 
-        window.saveLocalToDisk = () => {
-            localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
-            localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
-            // render çağrısını burada yapmıyoruz, UI'ı manuel güncelleyeceğiz ki titreme olmasın
-        };
-
-        window.syncNotes = (cloudNotes) => {
-            const noteMap = new Map();
-            // Yerel notları koy
-            window.localNotes.forEach(n => noteMap.set(n.id, n));
-            // Bulut notlarını koy (yereli ezer)
-            cloudNotes.forEach(n => {
-                if (!window.deletedIds.includes(n.id)) {
-                    noteMap.set(n.id, n);
-                }
-            });
-            
-            window.localNotes = Array.from(noteMap.values());
-            window.saveLocalToDisk();
-            render(window.localNotes); // Sadece sync olduğunda toplu render
-        };
-
-        window.saveNoteToStorage = async (note) => {
-            const noteId = note.id || 'loc_' + Date.now();
-            const localNote = { ...note, id: noteId, updatedAt: Date.now() };
-            
-            // Eğer daha önce silmişsek, kara listeden çıkar (Geri getirme)
-            const delIndex = window.deletedIds.indexOf(noteId);
-            if (delIndex > -1) {
-                window.deletedIds.splice(delIndex, 1);
-                localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
-            }
-
-            // Yerele Kaydet
-            const existingIdx = window.localNotes.findIndex(n => n.id === noteId);
-            if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
-            else window.localNotes.push(localNote);
-            
-            window.saveLocalToDisk();
-            render(window.localNotes); // Anında göster
-
-            // Buluta Kaydet
-            if (window.firebaseData.active) {
-                const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
-                if (noteId.startsWith('loc_')) {
-                    try {
-                        if(!note.id) {
-                            await addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-                        }
-                    } catch(e) {}
-                } else {
-                    updateDoc(doc(col, noteId), { ...note, updatedAt: serverTimestamp() });
-                }
-            }
-            return noteId;
-        };
-
-        // --- AGRESİF SİLME FONKSİYONU ---
-        window.deleteNoteFromStorage = async (id) => {
-            // 1. GÖRSEL YOK ETME (EN ÖNEMLİSİ)
-            // HTML'den elemanı bul ve anında DOM'dan sök
-            const cardElement = document.querySelector(`[data-note-id="${id}"]`);
-            if (cardElement) {
-                cardElement.style.transition = "all 0.3s ease-out";
-                cardElement.style.opacity = "0";
-                cardElement.style.transform = "scale(0.9)";
-                setTimeout(() => cardElement.remove(), 300);
-            }
-
-            // 2. KARA LİSTEYE EKLE (Geri gelmesini engelle)
-            if (!window.deletedIds.includes(id)) {
-                window.deletedIds.push(id);
-                localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
-            }
-
-            // 3. YEREL VERİDEN SİL
-            window.localNotes = window.localNotes.filter(n => n.id !== id);
-            window.saveLocalToDisk();
-
-            // 4. BULUTTAN SİL (Arka planda)
-            if (window.firebaseData.active && !id.startsWith('loc_')) {
+        function importBackup(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
                 try {
-                    deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
-                } catch(e) { console.error("Bulut silme hatası:", e); }
+                    const imported = JSON.parse(e.target.result);
+                    if (Array.isArray(imported)) {
+                        // Birleştir (ID çakışmasını önle)
+                        const currentIds = new Set(notes.map(n => n.id));
+                        let count = 0;
+                        imported.forEach(n => {
+                            if(!currentIds.has(n.id)) {
+                                notes.push(n);
+                                count++;
+                            }
+                        });
+                        saveToDisk();
+                        showToast(`${count} yeni not yüklendi!`, "success");
+                        toggleSettings();
+                    } else { showToast("Hatalı dosya.", "error"); }
+                } catch { showToast("Dosya okunamadı.", "error"); }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- AI ---
+        function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
+        function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
+        
+        function saveAiKey() {
+            const key = document.getElementById('gemini-key').value.trim();
+            if(key) {
+                localStorage.setItem('gemini_api_key', key);
+                showToast("Anahtar kaydedildi!", "success");
+                toggleSettings();
+            } else {
+                showToast("Lütfen anahtar girin.", "error");
             }
-        };
+        }
+
+        async function runAI(action) {
+            toggleAiMenu();
+            const contentDiv = document.getElementById('note-content');
+            const text = contentDiv.innerText;
+
+            if(!text.trim()) return showToast("Önce bir şeyler yazın!", "error");
+            
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if(!apiKey) {
+                toggleSettings();
+                return showToast("Lütfen önce API anahtarı girin.", "error");
+            }
+
+            document.getElementById('ai-loading').classList.remove('hidden');
+            document.getElementById('ai-loading').classList.add('flex');
+
+            let prompt = "";
+            const htmlInstruction = "Cevabı HTML formatında ver (<html> etiketi olmadan). Önemli yerleri <span class='highlight-important'>bu şekilde</span>, ikincil önemli yerleri <span class='highlight-blue'>bu şekilde</span> vurgula. Paragraf sonlarına <br><br> koy.";
+
+            if (action === 'fix') prompt = `Bu metni düzelt: ${text}. ${htmlInstruction}`;
+            else if (action === 'summarize') prompt = `Bu metni özetle: ${text}. ${htmlInstruction}`;
+            else if (action === 'expand') prompt = `Bu metni genişlet: ${text}. ${htmlInstruction}`;
+            else if (action === 'continue') prompt = `Devamını getir (2 cümle): ${text}. Sadece eklediğin kısmı ver. ${htmlInstruction}`;
+            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle, emoji ekle. Format: METİN|||RENK_NO (1-5). Metin: ${text}`;
+
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error.message);
+                const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (action === 'whatsapp') {
+                    const parts = result.split('|||');
+                    document.getElementById('wp-text').value = parts[0].trim();
+                    if(parts[1]) setWpColorIndex(parts[1].trim());
+                    closeModal();
+                    document.getElementById('wp-modal').classList.remove('hidden');
+                } else {
+                    if (action === 'continue') contentDiv.innerHTML += " " + result;
+                    else contentDiv.innerHTML = result;
+                }
+                showToast("Tamamlandı!", "success");
+            } catch (err) {
+                console.error(err);
+                showToast("AI Hatası: Anahtarınızı kontrol edin.", "error");
+            } finally {
+                document.getElementById('ai-loading').classList.add('hidden');
+                document.getElementById('ai-loading').classList.remove('flex');
+            }
+        }
+
+        // --- WhatsApp ---
+        function openWhatsAppMode() {
+            const content = document.getElementById('note-content').innerText;
+            document.getElementById('wp-text').value = content;
+            checkWpLimit();
+            document.getElementById('wp-modal').classList.remove('hidden');
+        }
+        function closeWp() { document.getElementById('wp-modal').classList.add('hidden'); }
+        function checkWpLimit() {
+            const len = document.getElementById('wp-text').value.length;
+            document.getElementById('wp-count').innerText = `${len}/700`;
+            document.getElementById('wp-count').className = len > 700 ? "text-red-500 font-bold" : "text-gray-400 font-mono";
+        }
+        function setWpColorIndex(idx) {
+            const colors = ['#25D366', '#FF5252', '#448AFF', '#7C4DFF', '#212121'];
+            document.getElementById('wp-preview').style.backgroundColor = colors[parseInt(idx)-1] || colors[0];
+        }
+        function setWpColor(c) { document.getElementById('wp-preview').style.backgroundColor = c; }
+        
+        function saveWpToNote() {
+            const text = document.getElementById('wp-text').value;
+            // Yeni not oluştur
+            currentNoteId = null;
+            document.getElementById('note-title').value = "Durum - " + new Date().toLocaleDateString();
+            document.getElementById('note-content').innerHTML = text;
+            currentCat = 'diger';
+            currentFont = 'font-hand';
+            saveCurrentNote();
+            closeWp();
+        }
+
+        // --- Ses ---
+        function setupVoice() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'tr-TR';
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                
+                recognition.onresult = (e) => {
+                    let final = '';
+                    for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
+                    if(final) {
+                        const el = document.getElementById('note-content');
+                        el.innerHTML += (el.innerHTML ? ' ' : '') + final;
+                        if(isListening && document.body.classList.contains('stealth-mode')) document.getElementById('stealth-text').innerText = final;
+                    }
+                };
+                recognition.onend = () => { if(isListening) try{recognition.start()}catch{} else updateMicState(false); };
+            }
+        }
+        function toggleVoice() {
+            if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
+            isListening = !isListening;
+            updateMicState(isListening);
+            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} } 
+            else { try{ recognition.stop(); }catch{} }
+        }
+        function updateMicState(on) {
+            const btn = document.getElementById('mic-btn');
+            if(on) { 
+                btn.classList.add('animate-pulse', 'bg-red-500', 'text-white'); 
+                btn.innerHTML = '<i data-lucide="mic-off"></i>';
+            } else { 
+                btn.classList.remove('animate-pulse', 'bg-red-500', 'text-white'); 
+                btn.innerHTML = '<i data-lucide="mic"></i>';
+            }
+            lucide.createIcons();
+        }
+
+        function toggleStealth() {
+            document.body.classList.toggle('stealth-mode');
+            if(document.body.classList.contains('stealth-mode')) { if(!isListening) toggleVoice(); }
+        }
+
+        function showToast(msg, type) {
+            const div = document.createElement('div');
+            div.className = `px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold animate-fade-in ${type === 'error' ? 'bg-red-500' : 'bg-gray-800'}`;
+            div.innerText = msg;
+            document.getElementById('toast-container').appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        }
     </script>
 
     <style>
@@ -200,11 +496,13 @@
             background-size: 32px 32px;
         }
 
+        /* Fontlar */
         .font-hand { font-family: 'Kalam', cursive; }
         .font-serif { font-family: 'Merriweather', serif; }
         .font-mono { font-family: 'Courier Prime', monospace; }
         .font-sans { font-family: 'Inter', sans-serif; }
 
+        /* Kart */
         .note-card {
             transition: transform 0.2s, box-shadow 0.2s;
             position: relative;
@@ -218,8 +516,7 @@
             z-index: 10;
         }
 
-        /* Kart İçi Scrollbar */
-        .card-scroll { overflow-y: auto; scrollbar-width: thin; }
+        /* Scrollbar */
         .card-scroll::-webkit-scrollbar { width: 4px; }
         .card-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 4px; }
 
@@ -233,6 +530,7 @@
         .cat-is { background: #f1f5f9; border-top: 5px solid #64748b; }
         .cat-diger { background: #ffffff; border-top: 5px solid #9ca3af; }
 
+        /* FAB */
         .fab {
             position: fixed; bottom: 24px; right: 24px; width: 64px; height: 64px;
             border-radius: 50%; background: #4f46e5; color: white;
@@ -242,20 +540,20 @@
         }
         .fab:active { transform: scale(0.90); }
 
-        /* Vurgular */
-        .highlight-important { color: #c2410c; font-weight: 700; background-color: #ffedd5; padding: 0 2px; border-radius: 2px; }
+        /* Placeholder */
+        [contenteditable]:empty:before { content: attr(placeholder); color: #9ca3af; display: block; }
+        
+        /* Highlights */
+        .highlight-important { color: #c2410c; font-weight: 700; background-color: #ffedd5; padding: 0 2px; }
         .highlight-blue { color: #1d4ed8; font-weight: 600; }
 
-        [contenteditable]:empty:before { content: attr(placeholder); color: #9ca3af; display: block; }
-
+        /* Stealth Mode */
         body.stealth-mode { background: #000 !important; overflow: hidden; }
         body.stealth-mode header, body.stealth-mode main, body.stealth-mode .fab { opacity: 0; pointer-events: none; }
         body.stealth-mode #stealth-overlay { display: flex; }
-
+        
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes micPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 100% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } }
-        .mic-active { animation: micPulse 1.5s infinite; background-color: #fee2e2 !important; color: #ef4444 !important; border-color: #ef4444 !important; }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800">
@@ -271,10 +569,9 @@
             </div>
             
             <div class="flex items-center gap-1">
-                <i data-lucide="cloud" id="cloud-icon" class="w-5 h-5 text-gray-300 mr-2 transition-colors" title="Bulut Durumu"></i>
-                <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="settings" class="w-5 h-5"></i></button>
-                <button onclick="openWhatsAppMode()" class="p-2 rounded-full hover:bg-green-50 text-green-600"><i data-lucide="smartphone" class="w-5 h-5"></i></button>
-                <button onclick="toggleStealth()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500"><i data-lucide="eye-off" class="w-5 h-5"></i></button>
+                <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500" title="Ayarlar & Yedekleme"><i data-lucide="settings" class="w-5 h-5"></i></button>
+                <button onclick="openWhatsAppMode()" class="p-2 rounded-full hover:bg-green-50 text-green-600" title="WhatsApp Modu"><i data-lucide="smartphone" class="w-5 h-5"></i></button>
+                <button onclick="toggleStealth()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500" title="Gizli Mod"><i data-lucide="eye-off" class="w-5 h-5"></i></button>
             </div>
         </div>
 
@@ -299,7 +596,7 @@
             <!-- Arama -->
             <div class="relative group">
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
-                <input type="text" id="searchInput" onkeyup="search()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
+                <input type="text" id="searchInput" onkeyup="renderNotes()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
             </div>
 
             <!-- Liste -->
@@ -313,7 +610,7 @@
     </main>
 
     <!-- FAB -->
-    <button onclick="openModal()" class="fab hover:scale-110 transition-transform">
+    <button onclick="openNewNote()" class="fab hover:scale-110 transition-transform">
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
 
@@ -327,8 +624,8 @@
                 <button onclick="closeModal()" class="md:hidden mr-3 text-gray-500"><i data-lucide="arrow-left"></i></button>
                 <input type="text" id="note-title" placeholder="Başlık" class="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 w-full text-gray-800 placeholder-gray-300">
                 <div class="flex gap-2 items-center">
-                    <button onclick="deleteCurrentNote()" id="btn-delete" class="hidden text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Sil"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
-                    <button onclick="saveNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
+                    <button id="btn-delete" class="hidden text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Sil"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                    <button onclick="saveCurrentNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
                 </div>
             </div>
 
@@ -362,7 +659,6 @@
                                 <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">İçerik Geliştirme</div>
                                 <button onclick="runAI('continue')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="pen-tool" class="w-4 h-4 text-orange-500"></i> Devamını Getir</button>
                                 <button onclick="runAI('formal')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="briefcase" class="w-4 h-4 text-blue-500"></i> Resmileştir</button>
-                                <button onclick="runAI('keypoints')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-gray-700"><i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Ana Fikirler</button>
                                 <div class="h-px bg-gray-100 my-1"></div>
                                 <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
                                 <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
@@ -405,42 +701,45 @@
     <!-- Ayarlar Modal -->
     <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl transform transition-all scale-100">
-            <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800"><i data-lucide="settings" class="mr-2 text-indigo-600"></i> Ayarlar</h2>
+            <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800"><i data-lucide="settings" class="mr-2 text-indigo-600"></i> Ayarlar & Yedek</h2>
             <div class="mb-4">
                 <label class="block text-xs font-bold text-indigo-600 uppercase mb-1">Gemini API Key</label>
-                <input type="password" id="gemini-key" class="w-full border border-indigo-100 bg-indigo-50 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                <input type="password" id="gemini-key" class="w-full border border-indigo-100 bg-indigo-50 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="AIzaSy...">
             </div>
-            <div class="mb-6">
-                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Firebase Config</label>
-                <input type="password" id="fb-key" class="w-full border rounded-lg p-2 text-sm mb-2" placeholder="API Key">
-                <input type="text" id="fb-app" class="w-full border rounded-lg p-2 text-sm" placeholder="App ID">
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button onclick="exportBackup()" class="flex flex-col items-center justify-center p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border transition-colors">
+                    <i data-lucide="download" class="w-5 h-5 text-green-600 mb-1"></i>
+                    <span class="text-xs font-bold text-gray-700">Yedeği İndir</span>
+                </button>
+                <button onclick="triggerImport()" class="flex flex-col items-center justify-center p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border transition-colors">
+                    <i data-lucide="upload" class="w-5 h-5 text-blue-600 mb-1"></i>
+                    <span class="text-xs font-bold text-gray-700">Yedek Yükle</span>
+                </button>
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="importBackup(this)">
             </div>
-            <div class="flex justify-between items-center pt-2 border-t border-gray-100 mt-4">
-                <button onclick="downloadBackup()" class="text-green-600 text-sm font-bold flex items-center hover:bg-green-50 px-3 py-2 rounded-lg transition-colors"><i data-lucide="download" class="w-4 h-4 mr-2"></i> Yedekle</button>
-                <div class="flex gap-2">
-                    <button onclick="toggleSettings()" class="text-gray-500 text-sm hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">İptal</button>
-                    <button onclick="saveSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">Kaydet</button>
-                </div>
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button onclick="toggleSettings()" class="text-gray-500 text-sm hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Kapat</button>
+                <button onclick="saveAiKey()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">Kaydet</button>
             </div>
         </div>
     </div>
 
     <!-- Onay Modalı -->
-    <div id="confirm-modal" class="fixed inset-0 z-[60] hidden bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl text-center">
+    <div id="confirm-modal" class="fixed inset-0 z-[80] hidden bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl text-center transform transition-all scale-100">
             <div class="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
                 <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
             </div>
-            <h3 class="text-lg font-bold text-gray-900 mb-2">Notu Sil?</h3>
-            <p class="text-sm text-gray-500 mb-6">Bu işlem geri alınamaz.</p>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Emin misiniz?</h3>
+            <p class="text-sm text-gray-500 mb-6">Bu not kalıcı olarak silinecek.</p>
             <div class="flex gap-3 justify-center">
                 <button onclick="closeConfirmModal()" class="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">Vazgeç</button>
-                <button onclick="performDelete()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium shadow-md">Evet, Sil</button>
+                <button onclick="confirmDeleteAction()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium shadow-md">Sil</button>
             </div>
         </div>
     </div>
 
-    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[80] space-y-2 pointer-events-none"></div>
+    <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[90] space-y-2 pointer-events-none"></div>
 
     <div id="stealth-overlay" class="fixed inset-0 bg-black z-[100] hidden flex flex-col items-center justify-center text-gray-800 text-xs select-none" onclick="toggleStealth()">
         <div class="mb-4 animate-pulse text-red-600 font-bold">● REC</div>
@@ -448,344 +747,6 @@
         <div id="stealth-text" class="mt-4 opacity-20 max-w-xs text-center truncate font-mono text-gray-600"></div>
     </div>
 
-    <script>
-        let notes = [];
-        let currentFilter = 'all';
-        let currentNoteId = null;
-        let recognition = null;
-        let isListening = false;
-        let currentFont = 'font-hand';
-        let currentCat = 'guncel';
-        let noteToDeleteId = null;
-
-        const CATEGORIES = { 'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 'kisisel': 'Kişisel', 'diger': 'Diğer' };
-
-        document.addEventListener('DOMContentLoaded', () => {
-            window.loadLocalNotes();
-            setupVoice();
-            lucide.createIcons();
-            document.getElementById('gemini-key').value = localStorage.getItem('gemini_api_key') || "";
-            document.getElementById('fb-key').value = localStorage.getItem('fb_api_key') || "";
-            document.getElementById('fb-app').value = localStorage.getItem('fb_app_id') || "";
-        });
-
-        window.loadLocalNotes = () => {
-            const saved = localStorage.getItem('baris_notes');
-            if (saved) {
-                window.localNotes = JSON.parse(saved);
-                render(window.localNotes);
-            } else {
-                window.localNotes = [];
-                render([]);
-            }
-        };
-
-        window.saveLocalToDisk = (shouldRender = true) => {
-            localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
-            if(shouldRender) render(window.localNotes);
-        };
-
-        window.syncNotes = (cloudNotes) => {
-            const noteMap = new Map();
-            window.localNotes.forEach(n => noteMap.set(n.id, n));
-            // Eğer cloudNotes'ta olmayan ve 'deletedNoteIds' içinde olan varsa, onu yerelden de sil (senkronize silme)
-            cloudNotes.forEach(n => {
-                if (!window.deletedNoteIds.has(n.id)) noteMap.set(n.id, n);
-            });
-            window.localNotes = Array.from(noteMap.values());
-            window.saveLocalToDisk();
-        };
-
-        function render(data) {
-            const grid = document.getElementById('notes-grid');
-            const empty = document.getElementById('empty-state');
-            grid.innerHTML = '';
-            const filtered = data.filter(n => currentFilter === 'all' || n.category === currentFilter).sort((a,b) => (b.updatedAt?.seconds || b.updatedAt) - (a.updatedAt?.seconds || a.updatedAt));
-            if (filtered.length === 0) empty.classList.remove('hidden'); else empty.classList.add('hidden');
-
-            filtered.forEach(note => {
-                const el = document.createElement('div');
-                const catClass = `cat-${note.category || 'diger'}`;
-                const fontClass = note.font || 'font-hand';
-                const date = new Date((note.updatedAt?.seconds || note.updatedAt / 1000) * 1000).toLocaleDateString('tr-TR');
-                
-                el.setAttribute('data-note-id', note.id);
-                el.className = `note-card ${catClass} flex flex-col h-56 animate-fade-in bg-white group`;
-                
-                el.innerHTML = `
-                    <div class="p-5 flex-1 overflow-hidden relative flex flex-col">
-                        <!-- Düzenle Butonu -->
-                        <button onclick="event.stopPropagation(); openNote('${note.id}')" class="absolute top-2 right-2 text-indigo-500 bg-white/80 rounded-full p-2 opacity-100 transition-opacity hover:bg-indigo-100 z-30 shadow-sm" title="Düzenle">
-                            <i data-lucide="pencil" class="w-4 h-4"></i>
-                        </button>
-                        
-                        <!-- Sil Butonu -->
-                        <button onclick="event.stopPropagation(); deleteNoteFromCard('${note.id}')" class="absolute top-2 left-2 text-red-400 bg-white/80 rounded-full p-2 opacity-100 transition-opacity hover:bg-red-100 z-30 shadow-sm" title="Sil">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
-                        </button>
-
-                        <div class="flex justify-between items-start mb-2 pr-8 pl-8 pointer-events-none">
-                            <h3 class="font-bold text-lg leading-tight line-clamp-2">${note.title || 'Başlıksız'}</h3>
-                        </div>
-                        
-                        <!-- Kaydırılabilir İçerik Alanı -->
-                        <div class="flex-1 overflow-y-auto card-scroll pr-2 relative z-10" onmousedown="event.stopPropagation()">
-                            <div class="text-sm opacity-90 ${fontClass} text-gray-800 break-words">${note.content || ''}</div>
-                        </div>
-
-                        <div class="absolute bottom-0 left-0 right-0 p-4 pt-4 bg-gradient-to-t from-white via-white/90 to-transparent flex justify-between items-end pointer-events-none">
-                            <span class="text-[10px] uppercase font-bold opacity-60 border border-current px-2 py-0.5 rounded tracking-wide">${CATEGORIES[note.category]}</span>
-                            <span class="text-xs opacity-50 font-medium">${date}</span>
-                        </div>
-                    </div>
-                `;
-                grid.appendChild(el);
-            });
-            lucide.createIcons();
-        }
-
-        function filter(cat) {
-            currentFilter = cat;
-            document.querySelectorAll('.cat-btn').forEach(b => { b.classList.remove('bg-gray-800', 'text-white'); b.classList.add('bg-white'); });
-            const btn = Array.from(document.querySelectorAll('.cat-btn')).find(b => b.innerText === CATEGORIES[cat] || (cat === 'all' && b.innerText === 'Tümü'));
-            if(btn) { btn.classList.add('bg-gray-800', 'text-white'); btn.classList.remove('bg-white'); }
-            render(window.localNotes);
-        }
-
-        function search() {
-            const val = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = window.localNotes.filter(n => (n.title+n.content).toLowerCase().includes(val));
-            render(filtered);
-        }
-
-        function openModal() {
-            currentNoteId = null;
-            document.getElementById('note-title').value = '';
-            document.getElementById('note-content').innerHTML = ''; // Div temizle
-            document.getElementById('btn-delete').classList.add('hidden');
-            renderCats('guncel');
-            setFont('font-hand');
-            document.getElementById('note-modal').classList.remove('hidden');
-            setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
-        }
-
-        function openNote(id) {
-            const note = window.localNotes.find(n => n.id === id);
-            if (!note) return;
-            currentNoteId = id;
-            document.getElementById('note-title').value = note.title || '';
-            document.getElementById('note-content').innerHTML = note.content || ''; // HTML yükle
-            document.getElementById('btn-delete').classList.remove('hidden');
-            renderCats(note.category || 'guncel');
-            setFont(note.font || 'font-hand');
-            document.getElementById('note-modal').classList.remove('hidden');
-            setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
-        }
-
-        function closeModal() {
-            document.getElementById('modal-panel').classList.add('translate-y-full');
-            setTimeout(() => {
-                document.getElementById('note-modal').classList.add('hidden');
-                document.getElementById('ai-popup').classList.add('hidden');
-                if(isListening) toggleVoice();
-            }, 300);
-        }
-
-        function renderCats(selected) {
-            currentCat = selected;
-            const div = document.getElementById('modal-cats');
-            div.innerHTML = '';
-            Object.keys(CATEGORIES).forEach(k => {
-                const btn = document.createElement('button');
-                btn.className = `px-3 py-1.5 rounded-full text-xs font-bold border transition-all whitespace-nowrap ${k === selected ? 'bg-gray-800 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`;
-                btn.innerText = CATEGORIES[k];
-                btn.onclick = () => { renderCats(k); };
-                div.appendChild(btn);
-            });
-        }
-
-        function setFont(fontClass) {
-            currentFont = fontClass;
-            const area = document.getElementById('note-content');
-            area.classList.remove('font-hand', 'font-serif', 'font-mono', 'font-sans');
-            area.classList.add(fontClass);
-        }
-
-        async function saveNote() {
-            const title = document.getElementById('note-title').value.trim();
-            const content = document.getElementById('note-content').innerHTML; // HTML al
-            
-            if (!title && !document.getElementById('note-content').innerText.trim()) return showToast('Boş not kaydedilemez', 'error');
-            
-            const noteData = { id: currentNoteId, title, content, category: currentCat, font: currentFont };
-            
-            // ID güncellensin
-            const savedId = await window.saveNoteToStorage(noteData);
-            currentNoteId = savedId; 
-            
-            showToast('Kaydedildi', 'success');
-        }
-
-        function openConfirmModal(id) {
-            noteToDeleteId = id;
-            document.getElementById('confirm-modal').classList.remove('hidden');
-        }
-
-        function closeConfirmModal() {
-            noteToDeleteId = null;
-            document.getElementById('confirm-modal').classList.add('hidden');
-        }
-
-        async function performDelete() {
-            if (!noteToDeleteId) return;
-            const idToDelete = noteToDeleteId;
-            closeConfirmModal();
-            if (currentNoteId === idToDelete) closeModal();
-            await window.deleteNoteFromStorage(idToDelete);
-            showToast('Not silindi', 'success');
-        }
-
-        function deleteCurrentNote() { if (currentNoteId) openConfirmModal(currentNoteId); }
-        function deleteNoteFromCard(id) { openConfirmModal(id); }
-
-        function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
-
-        async function runAI(action) {
-            toggleAiMenu();
-            const contentDiv = document.getElementById('note-content');
-            const contentText = contentDiv.innerText; 
-            
-            if(!contentText.trim()) return showToast("Önce bir şeyler yazmalısın!", "error");
-            const apiKey = localStorage.getItem('gemini_api_key');
-            if(!apiKey) return showToast("Ayarlardan API Anahtarı girmelisin!", "error");
-
-            document.getElementById('ai-loading').classList.remove('hidden');
-            document.getElementById('ai-loading').classList.add('flex');
-
-            let prompt = "";
-            const htmlInstruction = "Cevabı HTML formatında ver (<html> etiketi olmadan, sadece içerik). Önemli yerleri <span class='highlight-important'>bu şekilde</span>, ikincil önemli yerleri <span class='highlight-blue'>bu şekilde</span> vurgula. Satır sonlarına <br> koy.";
-
-            if (action === 'fix') prompt = `Bu metni Türkçe imla kurallarına göre düzelt: ${contentText}. ${htmlInstruction}`;
-            else if (action === 'summarize') prompt = `Bu metni Türkçe özetle: ${contentText}. ${htmlInstruction}`;
-            else if (action === 'expand') prompt = `Bu metni genişlet: ${contentText}. ${htmlInstruction}`;
-            else if (action === 'continue') prompt = `Devamını getir (2-3 cümle): ${contentText}. Sadece eklediğin kısmı ver. ${htmlInstruction}`;
-            else if (action === 'formal') prompt = `Resmi dille yaz: ${contentText}. ${htmlInstruction}`;
-            else if (action === 'keypoints') prompt = `Ana fikirleri çıkar: ${contentText}. ${htmlInstruction}`;
-            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için kısalt, emoji ekle, renk seç (1-5). Format: METİN|||RENK_NO. Metin: ${contentText}`;
-
-            try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                const data = await res.json();
-                if(data.error) throw new Error(data.error.message);
-                const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                
-                if (action === 'whatsapp') {
-                    const parts = result.split('|||');
-                    document.getElementById('wp-text').value = parts[0].trim();
-                    if(parts[1]) {
-                        const colors = ['#25D366', '#FF5252', '#448AFF', '#7C4DFF', '#212121'];
-                        setWpColor(colors[parseInt(parts[1])-1] || colors[0]);
-                    }
-                    closeModal();
-                    document.getElementById('wp-modal').classList.remove('hidden');
-                } else {
-                    if (action === 'continue') {
-                        contentDiv.innerHTML += " " + result;
-                    } else {
-                        contentDiv.innerHTML = result;
-                    }
-                }
-                showToast("Tamamlandı!", "success");
-            } catch (error) { console.error(error); showToast("Hata: " + error.message, "error"); } 
-            finally { 
-                document.getElementById('ai-loading').classList.add('hidden');
-                document.getElementById('ai-loading').classList.remove('flex');
-            }
-        }
-
-        function openWhatsAppMode() {
-            const currentContent = document.getElementById('note-content').innerText;
-            document.getElementById('wp-text').value = currentContent;
-            checkWpLimit();
-            document.getElementById('wp-modal').classList.remove('hidden');
-        }
-        function closeWp() { document.getElementById('wp-modal').classList.add('hidden'); }
-        function setWpColor(c) { document.getElementById('wp-preview').style.backgroundColor = c; }
-        function checkWpLimit() {
-            const len = document.getElementById('wp-text').value.length;
-            document.getElementById('wp-count').innerText = `${len}/700`;
-            document.getElementById('wp-count').className = len > 700 ? "text-red-500 font-bold" : "text-gray-400 font-mono";
-        }
-        function saveWpToNote() {
-            const text = document.getElementById('wp-text').value;
-            if(!currentNoteId) window.saveNoteToStorage({title: 'Durum Yazısı', content: text, category: 'diger', font: 'font-hand'});
-            else { document.getElementById('note-content').innerHTML = text; saveNote(); }
-            closeWp();
-            showToast("Kaydedildi", "success");
-        }
-
-        function setupVoice() {
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRecognition();
-                recognition.lang = 'tr-TR';
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.onresult = (e) => {
-                    let final = '';
-                    for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
-                    if(final) {
-                        const el = document.getElementById('note-content');
-                        el.innerHTML += (el.innerHTML ? ' ' : '') + final;
-                        if(isListening && document.body.classList.contains('stealth-mode')) document.getElementById('stealth-text').innerText = final;
-                    }
-                };
-                recognition.onend = () => { if(isListening) try{recognition.start()}catch{} else updateMicState(false); };
-            }
-        }
-        function toggleVoice() {
-            if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
-            isListening = !isListening;
-            updateMicState(isListening);
-            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} } else { try{ recognition.stop(); }catch{} }
-        }
-        function updateMicState(on) {
-            const btn = document.getElementById('mic-btn');
-            if(on) { btn.classList.add('mic-active', 'bg-red-100', 'text-red-600'); btn.innerHTML = '<i data-lucide="mic-off"></i>'; }
-            else { btn.classList.remove('mic-active', 'bg-red-100', 'text-red-600'); btn.innerHTML = '<i data-lucide="mic"></i>'; }
-            lucide.createIcons();
-        }
-
-        function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-        function saveSettings() {
-            localStorage.setItem('gemini_api_key', document.getElementById('gemini-key').value.trim());
-            localStorage.setItem('fb_api_key', document.getElementById('fb-key').value.trim());
-            localStorage.setItem('fb_app_id', document.getElementById('fb-app').value.trim());
-            toggleSettings();
-            showToast("Ayarlar kaydedildi", "success");
-            setTimeout(() => location.reload(), 500);
-        }
-        function downloadBackup() {
-            const blob = new Blob([JSON.stringify(window.localNotes, null, 2)], {type : 'application/json'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `yedek-${Date.now()}.json`;
-            a.click();
-        }
-        function toggleStealth() {
-            document.body.classList.toggle('stealth-mode');
-            if(document.body.classList.contains('stealth-mode')) { if(!isListening) toggleVoice(); }
-        }
-        function showToast(msg, type) {
-            const div = document.createElement('div');
-            div.className = `px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold animate-fade-in ${type === 'error' ? 'bg-red-500' : 'bg-gray-800'}`;
-            div.innerText = msg;
-            document.getElementById('toast-container').appendChild(div);
-            setTimeout(() => div.remove(), 3000);
-        }
-    </script>
 </body>
 </html>
 
