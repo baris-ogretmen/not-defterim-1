@@ -23,7 +23,7 @@
         // Global Değişkenler
         window.firebaseData = { db: null, auth: null, user: null, active: false };
         window.localNotes = [];
-        // Silinen notların ID'lerini kalıcı hafızada tut (Zombi notları engellemek için)
+        // Silinenleri kalıcı hafızada tut
         window.deletedIds = JSON.parse(localStorage.getItem('baris_deleted_ids') || "[]");
 
         const savedApiKey = localStorage.getItem('fb_api_key');
@@ -40,10 +40,11 @@
         };
 
         async function initApp() {
+            // Önce yerel veriyi yükle ve render et
             window.loadLocalNotes();
 
             if (firebaseConfig.apiKey === "DEMO_KEY" || firebaseConfig.apiKey.includes("BURAYA")) {
-                console.log("Yerel mod.");
+                console.log("Yerel modda çalışılıyor.");
                 return;
             }
 
@@ -69,7 +70,7 @@
                         initLiveListener(user.uid);
                     }
                 });
-            } catch (e) { console.error("Firebase:", e); }
+            } catch (e) { console.error("Firebase Hatası:", e); }
         }
 
         let unsubscribe = null;
@@ -80,7 +81,7 @@
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const cloudNotes = [];
                 snapshot.forEach(d => {
-                    // Eğer ID kara listede (deletedIds) YOKSA al
+                    // ID Kara listede ise ASLA alma
                     if (!window.deletedIds.includes(d.id)) {
                         cloudNotes.push({ id: d.id, ...d.data() });
                     }
@@ -97,6 +98,8 @@
             const saved = localStorage.getItem('baris_notes');
             if (saved) {
                 window.localNotes = JSON.parse(saved);
+                // Silinmişleri yerelden de temizle (Güvenlik önlemi)
+                window.localNotes = window.localNotes.filter(n => !window.deletedIds.includes(n.id));
                 render(window.localNotes);
             }
         };
@@ -104,81 +107,83 @@
         window.saveLocalToDisk = () => {
             localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
             localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
-            render(window.localNotes);
+            // render çağrısını burada yapmıyoruz, UI'ı manuel güncelleyeceğiz ki titreme olmasın
         };
 
         window.syncNotes = (cloudNotes) => {
             const noteMap = new Map();
-            
-            // Yerel notları ekle
+            // Yerel notları koy
             window.localNotes.forEach(n => noteMap.set(n.id, n));
-            
-            // Bulut notlarını üzerine yaz (Eğer silinmemişse)
+            // Bulut notlarını koy (yereli ezer)
             cloudNotes.forEach(n => {
                 if (!window.deletedIds.includes(n.id)) {
                     noteMap.set(n.id, n);
                 }
             });
-
+            
             window.localNotes = Array.from(noteMap.values());
             window.saveLocalToDisk();
+            render(window.localNotes); // Sadece sync olduğunda toplu render
         };
 
         window.saveNoteToStorage = async (note) => {
-            // ID Yönetimi: Yeni ise oluştur, eski ise kullan
             const noteId = note.id || 'loc_' + Date.now();
             const localNote = { ...note, id: noteId, updatedAt: Date.now() };
             
-            // Eğer yanlışlıkla silinenler listesindeyse kurtar
+            // Eğer daha önce silmişsek, kara listeden çıkar (Geri getirme)
             const delIndex = window.deletedIds.indexOf(noteId);
-            if (delIndex > -1) window.deletedIds.splice(delIndex, 1);
+            if (delIndex > -1) {
+                window.deletedIds.splice(delIndex, 1);
+                localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
+            }
 
-            // Yerel Güncelleme
+            // Yerele Kaydet
             const existingIdx = window.localNotes.findIndex(n => n.id === noteId);
             if (existingIdx > -1) window.localNotes[existingIdx] = localNote;
             else window.localNotes.push(localNote);
             
             window.saveLocalToDisk();
+            render(window.localNotes); // Anında göster
 
-            // Bulut Güncelleme
+            // Buluta Kaydet
             if (window.firebaseData.active) {
                 const col = collection(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes');
                 if (noteId.startsWith('loc_')) {
-                    // Yeni kayıt (ID'siz gönder, Firebase ID atar, ama biz local ID ile takip ederiz - Basit mod)
-                    // Gelişmiş mod: Custom ID kullan
                     try {
-                       if(!note.id) {
-                           // İlk kez oluşturuluyor
-                           await addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-                       } else {
-                           // Local ID ile güncelleme (Firebase'de bu ID yoksa hata verir, o yüzden basit addDoc daha güvenli bu yapıda)
-                           // Ancak duplicate olmaması için burayı es geçip sadece local çalışıp sync beklemek daha iyi.
-                           // Basitlik adına:
-                       }
+                        if(!note.id) {
+                            await addDoc(col, { ...note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                        }
                     } catch(e) {}
                 } else {
-                    // Mevcut Cloud ID'li notu güncelle
                     updateDoc(doc(col, noteId), { ...note, updatedAt: serverTimestamp() });
                 }
             }
             return noteId;
         };
 
+        // --- AGRESİF SİLME FONKSİYONU ---
         window.deleteNoteFromStorage = async (id) => {
-            // 1. Kara Listeye Ekle (Kalıcı Silme)
-            if (!window.deletedIds.includes(id)) {
-                window.deletedIds.push(id);
+            // 1. GÖRSEL YOK ETME (EN ÖNEMLİSİ)
+            // HTML'den elemanı bul ve anında DOM'dan sök
+            const cardElement = document.querySelector(`[data-note-id="${id}"]`);
+            if (cardElement) {
+                cardElement.style.transition = "all 0.3s ease-out";
+                cardElement.style.opacity = "0";
+                cardElement.style.transform = "scale(0.9)";
+                setTimeout(() => cardElement.remove(), 300);
             }
 
-            // 2. DOM'dan anında sil (Görsel hız)
-            const el = document.querySelector(`[data-note-id="${id}"]`);
-            if (el) el.remove();
+            // 2. KARA LİSTEYE EKLE (Geri gelmesini engelle)
+            if (!window.deletedIds.includes(id)) {
+                window.deletedIds.push(id);
+                localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
+            }
 
-            // 3. Yerel Veriden Sil
+            // 3. YEREL VERİDEN SİL
             window.localNotes = window.localNotes.filter(n => n.id !== id);
-            window.saveLocalToDisk(); // LocalStorage güncelle
+            window.saveLocalToDisk();
 
-            // 4. Buluttan Sil
+            // 4. BULUTTAN SİL (Arka planda)
             if (window.firebaseData.active && !id.startsWith('loc_')) {
                 try {
                     deleteDoc(doc(window.firebaseData.db, 'artifacts', defaultProject, 'users', window.firebaseData.user.uid, 'notes', id));
@@ -201,24 +206,20 @@
         .font-sans { font-family: 'Inter', sans-serif; }
 
         .note-card {
-            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition: transform 0.2s, box-shadow 0.2s;
             position: relative;
             border-radius: 16px;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.05);
         }
         .note-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
             z-index: 10;
         }
 
         /* Kart İçi Scrollbar */
-        .card-scroll {
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: rgba(0,0,0,0.1) transparent;
-        }
+        .card-scroll { overflow-y: auto; scrollbar-width: thin; }
         .card-scroll::-webkit-scrollbar { width: 4px; }
         .card-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 4px; }
 
@@ -481,18 +482,15 @@
 
         window.saveLocalToDisk = (shouldRender = true) => {
             localStorage.setItem('baris_notes', JSON.stringify(window.localNotes));
-            localStorage.setItem('baris_deleted_ids', JSON.stringify(window.deletedIds));
             if(shouldRender) render(window.localNotes);
         };
 
         window.syncNotes = (cloudNotes) => {
             const noteMap = new Map();
             window.localNotes.forEach(n => noteMap.set(n.id, n));
-            // Eğer cloudNotes'ta olmayan ve 'deletedIds' içinde olan varsa, onu yerelden de sil (senkronize silme)
+            // Eğer cloudNotes'ta olmayan ve 'deletedNoteIds' içinde olan varsa, onu yerelden de sil (senkronize silme)
             cloudNotes.forEach(n => {
-                if (!window.deletedIds.includes(n.id)) {
-                    noteMap.set(n.id, n);
-                }
+                if (!window.deletedNoteIds.has(n.id)) noteMap.set(n.id, n);
             });
             window.localNotes = Array.from(noteMap.values());
             window.saveLocalToDisk();
