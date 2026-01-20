@@ -335,7 +335,7 @@
             reader.readAsText(file);
         }
 
-        // --- AI ---
+        // --- AI (GÜÇLENDİRİLMİŞ) ---
         function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
         
@@ -366,14 +366,50 @@
             document.getElementById('ai-loading').classList.remove('hidden');
             document.getElementById('ai-loading').classList.add('flex');
 
+            // --- PROMPT MÜHENDİSLİĞİ (BARIŞ'IN SESİ) ---
             let prompt = "";
-            const htmlInstruction = "Cevabı HTML formatında ver (<html> etiketi olmadan). Önemli yerleri <span class='highlight-important'>bu şekilde</span>, ikincil önemli yerleri <span class='highlight-blue'>bu şekilde</span> vurgula. Paragraf sonlarına <br><br> koy.";
+            const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan). Ana fikirleri veya güçlü argümanları <span class='highlight-important'>bu şekilde kalın vurgula</span>, ikincil detayları <span class='highlight-blue'>mavi vurgula</span>. Paragrafları <br><br> ile ayır.";
+            
+            // Ortak Persona Talimatı
+            const persona = `
+                Sen Barış'ın kendisisin. Bu notları sen yazdın. 
+                Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
+                ASLA "Yazar burada şunu diyor" veya "Özetle" gibi dışarıdan bir dil kullanma.
+                Sanki bir kürsüde konuşma yapıyor veya profesyonel bir köşe yazısı yazıyormuşsun gibi; 
+                kelimeleri güçlendir, cümleleri akıcı hale getir ve savunduğum fikirleri daha ikna edici kıl.
+            `;
 
-            if (action === 'fix') prompt = `Bu metni düzelt: ${text}. ${htmlInstruction}`;
-            else if (action === 'summarize') prompt = `Bu metni özetle: ${text}. ${htmlInstruction}`;
-            else if (action === 'expand') prompt = `Bu metni genişlet: ${text}. ${htmlInstruction}`;
-            else if (action === 'continue') prompt = `Devamını getir (2 cümle): ${text}. Sadece eklediğin kısmı ver. ${htmlInstruction}`;
-            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle, emoji ekle. Format: METİN|||RENK_NO (1-5). Metin: ${text}`;
+            if (action === 'fix') {
+                // Düzelt: Sadece gramer değil, profesyonel bir editör gibi
+                prompt = `${persona} 
+                Bu notlarımı gramer açısından kusursuz hale getir. Dağınık cümlelerimi toparla. 
+                Üslubum yine samimi ama daha profesyonel olsun. Metnin özünü bozmadan parlat.
+                Metin: ${text}. ${htmlInstruction}`;
+            } 
+            else if (action === 'summarize') {
+                // Özetle: Bir manifesto gibi
+                prompt = `${persona} 
+                Bu notlardaki düşüncelerimi damıt. Gereksiz tekrarları at. 
+                Sanki "Benim bu konudaki net duruşum şudur:" diyerek fikirlerimi madde madde veya güçlü paragraflar halinde sun.
+                Karşımdakini ikna edecek bir profesyonellikte olsun.
+                Metin: ${text}. ${htmlInstruction}`;
+            } 
+            else if (action === 'formal') {
+                // Resmileştir: Kurumsal/Akademik Barış
+                prompt = `${persona} 
+                Bu notlarımı al ve kurumsal veya akademik bir ortama sunulacak hale getir. 
+                Yine 'Ben' diliyle yaz ama kelime seçimlerim son derece üst düzey ve saygın olsun.
+                Metin: ${text}. ${htmlInstruction}`;
+            }
+            else if (action === 'expand') {
+                prompt = `${persona} Bu notlardaki argümanlarımı biraz daha aç ve detaylandır. Aynı bakış açısıyla, konuyu derinleştir. Metin: ${text}. ${htmlInstruction}`;
+            }
+            else if (action === 'continue') {
+                prompt = `${persona} Bu yazdıklarımın devamını getir (2-3 cümle). Akışı bozma, tam kaldığım yerden aynı tonda devam et. Sadece eklediğin kısmı ver. Metin: ${text}. ${htmlInstruction}`;
+            }
+            else if (action === 'whatsapp') {
+                prompt = `Bu metni WhatsApp durumu (max 700 karakter) için düzenle. Yine benim ağzımdan, kısa, öz ve etkileyici olsun. Emoji ekle. Format: METİN|||RENK_NO (1-5). Metin: ${text}`;
+            }
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -393,7 +429,7 @@
                     if (action === 'continue') contentDiv.innerHTML += " " + result;
                     else contentDiv.innerHTML = result;
                 }
-                showToast("Tamamlandı!", "success");
+                showToast("Notun profesyonelce düzenlendi!", "success");
             } catch (err) {
                 console.error(err);
                 showToast("AI Hatası: Anahtarınızı kontrol edin.", "error");
@@ -749,5 +785,4 @@
 
 </body>
 </html>
-
 
