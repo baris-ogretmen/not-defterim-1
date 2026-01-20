@@ -335,7 +335,7 @@
             reader.readAsText(file);
         }
 
-        // --- AI (GÜÇLENDİRİLMİŞ) ---
+        // --- AI (GÜÇLENDİRİLMİŞ: KISA & UZUN VERSİYON) ---
         function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
         
@@ -357,7 +357,9 @@
 
             if(!text.trim()) return showToast("Önce bir şeyler yazın!", "error");
             
-            const apiKey = localStorage.getItem('gemini_api_key');
+            // Anahtarı alırken boşlukları temizle
+            const apiKey = localStorage.getItem('gemini_api_key') ? localStorage.getItem('gemini_api_key').trim() : null;
+            
             if(!apiKey) {
                 toggleSettings();
                 return showToast("Lütfen önce API anahtarı girin.", "error");
@@ -380,22 +382,29 @@
             `;
 
             if (action === 'fix') {
-                // Düzelt: Sadece gramer değil, profesyonel bir editör gibi
                 prompt = `${persona} 
                 Bu notlarımı gramer açısından kusursuz hale getir. Dağınık cümlelerimi toparla. 
                 Üslubum yine samimi ama daha profesyonel olsun. Metnin özünü bozmadan parlat.
                 Metin: ${text}. ${htmlInstruction}`;
             } 
-            else if (action === 'summarize') {
-                // Özetle: Bir manifesto gibi
+            else if (action === 'summarize_short') {
+                // KISA VERSİYON: Vurucu, net, sloganvari
                 prompt = `${persona} 
-                Bu notlardaki düşüncelerimi damıt. Gereksiz tekrarları at. 
-                Sanki "Benim bu konudaki net duruşum şudur:" diyerek fikirlerimi madde madde veya güçlü paragraflar halinde sun.
-                Karşımdakini ikna edecek bir profesyonellikte olsun.
+                Bu notlardaki düşüncelerimin "Kısa ve Öz" halini istiyorum.
+                Detaylara boğulmadan, en vurucu argümanımı ve son kararımı tek bir paragrafta veya 3-4 maddede net bir şekilde ifade et.
+                Okuyan kişi 30 saniyede "Barış'ın duruşu budur" diyebilsin.
+                Sloganvari ve akılda kalıcı olsun.
                 Metin: ${text}. ${htmlInstruction}`;
             } 
+            else if (action === 'summarize_long') {
+                // UZUN VERSİYON: Detaylı, kapsamlı, doyurucu
+                prompt = `${persona} 
+                Bu notları "Detaylı ve Kapsamlı" bir şekilde ele al.
+                Hiçbir önemli detayı atlama. Argümanlarımı, gerekçelerimi ve örneklerimi genişleterek, okuyucuyu tam anlamıyla doyuracak uzun bir yazı/konuşma metni hazırla.
+                Fikirlerimin altını doldur, neden böyle düşündüğümü derinlemesine anlat.
+                Metin: ${text}. ${htmlInstruction}`;
+            }
             else if (action === 'formal') {
-                // Resmileştir: Kurumsal/Akademik Barış
                 prompt = `${persona} 
                 Bu notlarımı al ve kurumsal veya akademik bir ortama sunulacak hale getir. 
                 Yine 'Ben' diliyle yaz ama kelime seçimlerim son derece üst düzey ve saygın olsun.
@@ -412,12 +421,20 @@
             }
 
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                // KULLANICI İSTEĞİ ÜZERİNE GÜNCELLENDİ: 'gemini-2.0-flash-exp'
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
-                if(data.error) throw new Error(data.error.message);
+                
+                // Hata varsa detaylı göster
+                if(data.error) {
+                    console.error("API Hatası:", data.error);
+                    throw new Error(data.error.message || "API yanıt vermedi.");
+                }
+
                 const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!result) throw new Error("AI boş yanıt döndürdü.");
 
                 if (action === 'whatsapp') {
                     const parts = result.split('|||');
@@ -432,7 +449,8 @@
                 showToast("Notun profesyonelce düzenlendi!", "success");
             } catch (err) {
                 console.error(err);
-                showToast("AI Hatası: Anahtarınızı kontrol edin.", "error");
+                // Hata mesajını kullanıcıya göster
+                showToast("AI Hatası: " + err.message, "error");
             } finally {
                 document.getElementById('ai-loading').classList.add('hidden');
                 document.getElementById('ai-loading').classList.remove('flex');
@@ -698,7 +716,10 @@
                                 <div class="h-px bg-gray-100 my-1"></div>
                                 <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
                                 <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
-                                <button onclick="runAI('summarize')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="file-text" class="w-4 h-4 text-gray-500"></i> Özetle</button>
+                                <!-- YENİ BUTONLAR -->
+                                <button onclick="runAI('summarize_short')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="scissors" class="w-4 h-4 text-rose-500"></i> Kısa Özet</button>
+                                <button onclick="runAI('summarize_long')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="align-justify" class="w-4 h-4 text-teal-500"></i> Uzun Özet</button>
+                                <!-- YENİ BUTONLAR BİTİŞ -->
                                 <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700 font-medium"><i data-lucide="smartphone" class="w-4 h-4"></i> WhatsApp Modu</button>
                             </div>
                         </div>
@@ -785,4 +806,3 @@
 
 </body>
 </html>
-
