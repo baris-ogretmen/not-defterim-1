@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v28'; // V28 - Link Hatası Kesin Çözüm
+        const CURRENT_KEY = 'baris_final_notes_v29'; // V29 - Link Kesin Çözüm
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -29,7 +29,7 @@
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27'
+            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28'
         ];
         
         let notes = [];
@@ -71,7 +71,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v27');
+                 const prevData = localStorage.getItem('baris_final_notes_v28');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -202,6 +202,7 @@
             const grid = document.getElementById('notes-grid');
             const empty = document.getElementById('empty-state');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
             grid.innerHTML = '';
 
             const filtered = notes.filter(n => {
@@ -406,7 +407,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V28 - GÜÇLENDİRİLMİŞ) ---
+        // --- YOUTUBE ASİSTANI (V28 - GÜÇLENDİRİLMİŞ LİNK) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
