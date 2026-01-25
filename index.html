@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v24'; // V24 - Pedagojik Zeka & Kırmızı Kalem
+        const CURRENT_KEY = 'baris_final_notes_v23'; // V23 - iPhone Link Fix
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -27,8 +27,7 @@
             'baris_final_notes_v11', 'baris_final_notes_v12', 'baris_final_notes_v13', 
             'baris_final_notes_v14', 'baris_final_notes_v15', 'baris_final_notes_v16', 
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
-            'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
-            'baris_final_notes_v23'
+            'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22'
         ];
         
         let notes = [];
@@ -60,17 +59,22 @@
                 checkSelection();
                 handleSlashCommands(e);
             });
-            editor.addEventListener('touchend', () => setTimeout(checkSelection, 100));
+            
+            // Dokunmatik cihazlar için seçim kontrolü
+            editor.addEventListener('touchend', () => {
+                setTimeout(checkSelection, 100);
+            });
             
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('gemini-key').value = key;
         });
 
-        // --- MIGRATION ---
+        // --- MIGRATION (Kurtarma) ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v23');
+                 // Bir önceki sürümü kontrol et
+                 const prevData = localStorage.getItem('baris_final_notes_v22');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -105,7 +109,10 @@
         function loadNotes() {
             let raw = localStorage.getItem(UNIVERSAL_KEY);
             if (!raw) raw = localStorage.getItem(CURRENT_KEY);
-            if (raw) { try { notes = JSON.parse(raw); } catch (e) { notes = []; } } else { notes = []; }
+
+            if (raw) {
+                try { notes = JSON.parse(raw); } catch (e) { notes = []; }
+            } else { notes = []; }
             renderNotes();
         }
 
@@ -116,22 +123,32 @@
             renderNotes();
         }
 
-        // --- KOPYALAMA ---
+        // --- KOPYALAMA FONKSİYONU ---
         function copyNoteContent() {
             const content = document.getElementById('note-content').innerText;
             if (!content) return showToast("Kopyalanacak metin yok.", "error");
 
+            // Mobil uyumlu kopyalama
             const textArea = document.createElement("textarea");
             textArea.value = content;
-            textArea.style.position = "fixed"; textArea.style.left = "-9999px";
+            textArea.style.position = "fixed"; 
+            textArea.style.left = "-9999px";
             document.body.appendChild(textArea);
-            textArea.focus(); textArea.select();
+            textArea.focus();
+            textArea.select();
             
             try {
-                document.execCommand('copy');
-                showToast("Tüm metin kopyalandı!", "success");
+                const successful = document.execCommand('copy');
+                if(successful) showToast("Tüm metin kopyalandı! Sitene yapıştırabilirsin.", "success");
+                else throw new Error("Kopyalama başarısız");
             } catch (err) {
-                showToast("Kopyalama hatası.", "error");
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(content).then(() => {
+                        showToast("Tüm metin kopyalandı!", "success");
+                    }).catch(() => showToast("Kopyalama başarısız.", "error"));
+                } else {
+                    showToast("Kopyalama hatası.", "error");
+                }
             }
             document.body.removeChild(textArea);
         }
@@ -142,7 +159,11 @@
             const contentHTML = document.getElementById('note-content').innerHTML;
             const contentText = document.getElementById('note-content').innerText.trim();
 
-            if (!title && !contentText) { showToast("Boş not kaydedilemez!", "error"); return; }
+            if (!title && !contentText) {
+                showToast("Boş not kaydedilemez!", "error");
+                return;
+            }
+
             const timestamp = Date.now();
 
             if (currentNoteId) {
@@ -186,6 +207,7 @@
             const grid = document.getElementById('notes-grid');
             const empty = document.getElementById('empty-state');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
+
             grid.innerHTML = '';
 
             const filtered = notes.filter(n => {
@@ -194,7 +216,8 @@
                 return inCat && inSearch;
             }).sort((a, b) => b.updatedAt - a.updatedAt);
 
-            if (filtered.length === 0) empty.classList.remove('hidden'); else empty.classList.add('hidden');
+            if (filtered.length === 0) empty.classList.remove('hidden');
+            else empty.classList.add('hidden');
 
             filtered.forEach(note => {
                 const date = new Date(note.updatedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
@@ -249,8 +272,10 @@
             currentNoteId = id;
             document.getElementById('note-title').value = note.title;
             document.getElementById('note-content').innerHTML = note.content;
+            
             document.getElementById('btn-delete').classList.remove('hidden');
             document.getElementById('btn-delete').onclick = function() { initiateDelete(id); };
+
             setCategory(note.category || 'guncel');
             setFont(note.font || 'font-hand');
             showModal();
@@ -306,8 +331,6 @@
             document.execCommand('foreColor', false, color);
         }
 
-        function updateStats() { /* Kaldırıldı */ }
-
         // --- GÖRSEL & KULLANIŞLILIK ---
         function checkSelection() {
             const selection = window.getSelection();
@@ -346,6 +369,10 @@
                 lucide.createIcons();
                 floatingMenu.classList.add('hidden');
             }
+        }
+
+        function updateStats() {
+            // İstatistikler kaldırıldı
         }
 
         function toggleZenMode() {
@@ -390,19 +417,12 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI ---
+        // --- YOUTUBE ASİSTANI (V23 FİNAL - GARANTİ LİNK) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
         function closeYouTubeMode() {
             document.getElementById('yt-modal').classList.add('hidden');
-        }
-        
-        function openTranscriptSite(service) {
-            let url = '';
-            if (service === 1) url = 'https://youtubetranscript.com/';
-            else if (service === 2) url = 'https://downsub.com/';
-            window.open(url, '_blank');
         }
         
         async function processYouTubeTranscript() {
@@ -491,23 +511,23 @@
             document.getElementById('ai-loading').classList.add('flex');
 
             let prompt = "";
-            const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
             
-            // "KIRMIZI KALEM" & FOSFORLU VURGU (Okunabilirlik Odaklı)
+            // Renkli Vurgu
             const multiColorHighlight = `
-                Önemli noktaları ve can alıcı kelimeleri şu HTML sınıflarını kullanarak vurgula:
-                <span class='highlight-red'>Kırmızı Vurgu</span> (Çok önemli),
-                <span class='highlight-blue'>Mavi Vurgu</span> (Terimler/Kavramlar),
-                <span class='highlight-black'>Koyu Vurgu</span> (Anahtar Kelimeler),
-                <span class='highlight-marker'>Fosforlu Arka Plan</span> (Dikkat çekici kısımlar).
-                Metin görsel olarak zengin, okunabilir ve profesyonel dursun.
+                Önemli noktaları ve can alıcı kelimeleri vurgulamak için şu HTML sınıflarını rastgele ve metnin akışına uygun şekilde kullanarak renklendir:
+                <span class='highlight-yellow'>Sarı Vurgu</span>, 
+                <span class='highlight-green'>Yeşil Vurgu</span>, 
+                <span class='highlight-pink'>Pembe Vurgu</span>, 
+                <span class='highlight-purple'>Mor Vurgu</span>, 
+                <span class='highlight-blue'>Mavi Vurgu</span>, 
+                <span class='highlight-orange'>Turuncu Vurgu</span>.
+                Metin rengarenk, canlı ve dikkat çekici olsun.
             `;
             
             const persona = `
                 Sen Barış'ın kendisisin. Bir öğretmensin ve blog yazarısın.
-                Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
-                ASLA "Yazar burada şunu diyor" veya "Ben Barış hoca olarak..." deme. Doğrudan konuya gir.
-                "Merhaba arkadaşlar", "Bakın burası çok önemli" gibi doğal konuşma dili kullan.
+                Görevin: Bu notları/transkripti alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
+                ASLA "Yazar burada şunu diyor" deme.
             `;
 
             if (action === 'generate_title') {
@@ -518,34 +538,18 @@
             }
             else if (action === 'youtube_summary') {
                 prompt = `${persona}
-                Aşağıdaki metin bir YouTube videosunun ham transkriptidir. Metni temizle.
-                Sanki bu videoyu izlemişim ve en can alıcı noktalarını not almışım gibi "Kısa ve Öz" bir özet çıkar.
-                ${multiColorHighlight}
-                Sloganvari ara başlıklar kullan.
+                Aşağıdaki metin bir YouTube videosunun ham transkriptidir (yazıya dökülmüş halidir). İçinde zaman damgaları (00:12 gibi) veya anlamsız kelimeler olabilir.
+                1. Önce metni temizle ve ana fikri anla.
+                2. Sonra bu videoyu sanki ben (Barış) izlemişim ve en önemli, en can alıcı noktalarını not almışım gibi özetle.
+                3. "Bu videoda anlatılanlar şunlardır" deme. "Bugün şundan bahsedeceğim" veya "Bakın arkadaşlar, olay şu..." gibi konuşma diliyle yaz.
+                4. ${multiColorHighlight}
+                5. Sloganvari ara başlıklar kullan.
                 Metin: ${text}`;
             }
-            // YENİ: PEDAGOJİK ZEKA
-            else if (action === 'pedagogical_organizer') {
-                 prompt = `${persona}
-                 Bu metnin içeriğini analiz et (Tarih, Süreç, Karşılaştırma, Hiyerarşi vb.).
-                 En uygun görsel örgütleyiciyi/yöntemi (Örn: Balık Kılçığı, Venn Şeması, Tarih Şeridi, Akış Şeması, Kavram Haritası, T-Çizelgesi) yapay zeka olarak sen SEÇ.
-                 
-                 Çıktı Formatı (HTML):
-                 <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm mb-4">
-                    <h3 class="text-blue-900 font-bold text-lg mb-2 flex items-center gap-2">🎯 Seçilen Yöntem: [Yöntem Adı]</h3>
-                    <p class="text-sm text-blue-700 italic mb-4">"Neden bu yöntemi seçtim? Çünkü [Kısa Gerekçe]"</p>
-                    <div class="space-y-3 bg-white p-4 rounded-lg border border-gray-100">
-                        [İçeriği seçilen yönteme göre tablolar (HTML Table), maddeler veya kutucuklarla görselleştir]
-                    </div>
-                 </div>
-                 
-                 ${multiColorHighlight}
-                 Metin: ${text}`;
-            }
-            else if (action === 'socratic_questions') {
-                prompt = `Bu metindeki konuyu derinleştirmek için öğrencilere sorulabilecek 3 adet "Sokratik Soru" üret.
-                Cevabı evet/hayır olmayan, düşündürücü sorular olsun.
-                HTML formatında ver. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". Metin: ${text}`;
+            else if (action === 'mind_map') {
+                prompt = `Bu metindeki ana kavramları hiyerarşik bir "Kavram Haritası" (Mind Map) olarak özetle.
+                Çıktıyı HTML unordered list (<ul>) yapısında ver.
+                Ana başlıklar <span class='highlight-purple font-bold'> bu şekilde</span>, alt başlıklar <span class='highlight-blue'> bu şekilde</span> olsun. Başlık: "<h3>🗺️ Kavram Haritası</h3>". Metin: ${text}`;
             }
             else if (action === 'summarize_short') {
                 prompt = `${persona}
@@ -561,7 +565,7 @@
                 Samimi, akıcı ve emojili olsun. Metin: ${text}`;
             }
             else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
-            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
+            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. HTML formatında. Metin: ${text}`;
             else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
             else if (action === 'fix') prompt = `${persona} Gramer açısından düzelt. ${multiColorHighlight} Metin: ${text}`;
             else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
@@ -590,7 +594,7 @@
                     const titleEl = document.getElementById('note-title');
                     titleEl.value = result.trim() + " " + titleEl.value;
                     showToast("Ruh hali eklendi!", "success");
-                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map', 'pedagogical_organizer', 'socratic_questions'].includes(action)) {
+                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map'].includes(action)) {
                     contentDiv.innerHTML += "<br><br>" + result;
                     contentDiv.scrollTop = contentDiv.scrollHeight;
                 } else {
@@ -740,11 +744,13 @@
         /* Placeholder */
         [contenteditable]:empty:before { content: attr(placeholder); color: #9ca3af; display: block; }
         
-        /* KIRMIZI KALEM STİLİ VURGULAR (Okunabilirlik) */
-        .highlight-red { color: #dc2626; font-weight: 800; }
-        .highlight-blue { color: #2563eb; font-weight: 800; }
-        .highlight-black { color: #000000; font-weight: 900; text-decoration: underline; }
-        .highlight-marker { background-color: #fef08a; padding: 0 2px; }
+        /* ÇOK RENKLİ VURGULAR (Marker Style) */
+        .highlight-yellow { background-color: #fef08a; color: #854d0e; padding: 0 4px; border-radius: 4px; }
+        .highlight-green { background-color: #bbf7d0; color: #166534; padding: 0 4px; border-radius: 4px; }
+        .highlight-pink { background-color: #fbcfe8; color: #9d174d; padding: 0 4px; border-radius: 4px; }
+        .highlight-blue { background-color: #bfdbfe; color: #1e40af; padding: 0 4px; border-radius: 4px; }
+        .highlight-purple { background-color: #e9d5ff; color: #6b21a8; padding: 0 4px; border-radius: 4px; }
+        .highlight-orange { background-color: #fed7aa; color: #9a3412; padding: 0 4px; border-radius: 4px; }
 
         /* Stealth Mode */
         body.stealth-mode { background: #000 !important; overflow: hidden; }
@@ -840,10 +846,10 @@
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
                         <!-- LINK DÜZELTİLDİ: SADECE SAF HTML -->
-                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <a href="https://youtubetranscript.com/" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
                         </a>
-                        <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <a href="https://downsub.com/" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 2
                         </a>
                     </div>
@@ -852,7 +858,7 @@
                     <div class="mt-2">
                         <p class="mb-1 text-gray-500">Butonlar çalışmazsa bu linki kopyala:</p>
                         <div class="flex items-center gap-2">
-                             <input type="text" value="[https://youtubetranscript.com/](https://youtubetranscript.com/)" class="flex-1 text-[10px] text-gray-600 bg-gray-100 border rounded p-1 select-all" readonly>
+                             <input type="text" value="https://youtubetranscript.com/" class="flex-1 text-[10px] text-gray-600 bg-gray-100 border rounded p-1 select-all" readonly>
                         </div>
                     </div>
 
@@ -933,8 +939,8 @@
                                     
                                     <div class="h-px bg-gray-100 my-1"></div>
                                     <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Eğitim & Analiz</div>
-                                    <button onclick="runAI('pedagogical_organizer')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="layout-template" class="w-4 h-4"></i> Pedagojik Örgütleyici Seç</button>
-                                    <button onclick="runAI('socratic_questions')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="message-circle-question" class="w-4 h-4"></i> Sokratik Sorular</button>
+                                    <button onclick="runAI('analyze_mood')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="smile" class="w-4 h-4"></i> Duygu Durumu (Mood)</button>
+                                    <button onclick="runAI('mind_map')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="network" class="w-4 h-4"></i> Kavram Haritası</button>
                                     <button onclick="runAI('extract_tasks')" class="w-full text-left px-3 py-2 hover:bg-yellow-50 rounded-lg text-sm flex items-center gap-2 text-yellow-700"><i data-lucide="list-todo" class="w-4 h-4"></i> Görevleri Çıkar</button>
                                     <button onclick="runAI('quiz')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="brain-circuit" class="w-4 h-4"></i> Sınav Yap (Quiz)</button>
                                     
