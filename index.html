@@ -16,13 +16,15 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const STORAGE_KEY = 'baris_final_notes_v6'; // Versiyon 6 - Öğretmen & Webmaster Modu
+        const CURRENT_KEY = 'baris_final_notes_v8'; // Final Sürüm
+        const OLD_KEYS = ['baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v4', 'baris_final_notes_v5', 'baris_final_notes_v6', 'baris_final_notes_v7'];
         
-        // Uygulama Durumu
         let notes = [];
         let currentFilter = 'all';
         let currentNoteId = null;
         let noteToDeleteId = null;
+        let isListening = false;
+        let recognition = null;
         let currentFont = 'font-hand';
         let currentCat = 'guncel';
         let isZenMode = false;
@@ -35,10 +37,11 @@
 
         // --- BAŞLATMA ---
         document.addEventListener('DOMContentLoaded', () => {
+            migrateOldNotes();
             loadNotes();
+            setupVoice();
             lucide.createIcons();
             
-            // Editör Events
             const editor = document.getElementById('note-content');
             editor.addEventListener('input', updateStats);
             editor.addEventListener('mouseup', checkSelection);
@@ -47,30 +50,54 @@
                 handleSlashCommands(e);
             });
             
-            // API Anahtarını Yükle
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('gemini-key').value = key;
         });
 
-        // --- TEMEL FONKSİYONLAR ---
+        // --- MIGRATION (Eski Notları Kurtarma) ---
+        function migrateOldNotes() {
+            let migratedCount = 0;
+            let currentNotes = JSON.parse(localStorage.getItem(CURRENT_KEY) || '[]');
+            const existingIds = new Set(currentNotes.map(n => n.id));
 
+            OLD_KEYS.forEach(key => {
+                const oldData = localStorage.getItem(key);
+                if (oldData) {
+                    try {
+                        const parsed = JSON.parse(oldData);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach(note => {
+                                if (!existingIds.has(note.id)) {
+                                    currentNotes.push(note);
+                                    existingIds.add(note.id);
+                                    migratedCount++;
+                                }
+                            });
+                        }
+                    } catch (e) { console.error("Veri hatası:", key); }
+                }
+            });
+
+            if (migratedCount > 0) {
+                localStorage.setItem(CURRENT_KEY, JSON.stringify(currentNotes));
+            }
+        }
+
+        // --- TEMEL FONKSİYONLAR ---
         function loadNotes() {
-            const raw = localStorage.getItem(STORAGE_KEY);
+            const raw = localStorage.getItem(CURRENT_KEY);
             if (raw) {
                 try { notes = JSON.parse(raw); } catch (e) { notes = []; }
-            } else {
-                notes = [];
-            }
+            } else { notes = []; }
             renderNotes();
         }
 
         function saveToDisk() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+            localStorage.setItem(CURRENT_KEY, JSON.stringify(notes));
             renderNotes();
         }
 
-        // --- CRUD İŞLEMLERİ ---
-
+        // --- CRUD ---
         function saveCurrentNote() {
             const title = document.getElementById('note-title').value.trim();
             const contentHTML = document.getElementById('note-content').innerHTML;
@@ -86,35 +113,18 @@
             if (currentNoteId) {
                 const index = notes.findIndex(n => n.id === currentNoteId);
                 if (index > -1) {
-                    notes[index] = {
-                        ...notes[index],
-                        title: title,
-                        content: contentHTML,
-                        category: currentCat,
-                        font: currentFont,
-                        updatedAt: timestamp
-                    };
+                    notes[index] = { ...notes[index], title, content: contentHTML, category: currentCat, font: currentFont, updatedAt: timestamp };
                 }
             } else {
                 const newId = 'note_' + timestamp + '_' + Math.random().toString(36).substr(2, 9);
-                const newNote = {
-                    id: newId,
-                    title: title,
-                    content: contentHTML,
-                    category: currentCat,
-                    font: currentFont,
-                    createdAt: timestamp,
-                    updatedAt: timestamp
-                };
+                const newNote = { id: newId, title, content: contentHTML, category: currentCat, font: currentFont, createdAt: timestamp, updatedAt: timestamp };
                 notes.push(newNote);
                 currentNoteId = newId;
-                
                 document.getElementById('btn-delete').classList.remove('hidden');
                 document.getElementById('btn-delete').onclick = function() { initiateDelete(newId); };
             }
-
             saveToDisk();
-            showToast("Not başarıyla kaydedildi.", "success");
+            showToast("Not kaydedildi.", "success");
         }
 
         function initiateDelete(id) {
@@ -128,7 +138,7 @@
             saveToDisk();
             if (currentNoteId === noteToDeleteId) closeModal();
             closeConfirmModal();
-            showToast("Not tamamen silindi.", "success");
+            showToast("Not silindi.", "success");
         }
 
         function closeConfirmModal() {
@@ -160,11 +170,7 @@
 
                 const card = document.createElement('div');
                 card.className = `note-card ${catClass} flex flex-col h-60 bg-white group animate-fade-in relative`;
-                
-                card.onclick = (e) => {
-                    if (window.getSelection().toString().length > 0) return;
-                    openNote(note.id);
-                };
+                card.onclick = (e) => { if (window.getSelection().toString().length > 0) return; openNote(note.id); };
 
                 card.innerHTML = `
                     <div class="p-5 flex-1 flex flex-col h-full relative">
@@ -189,7 +195,7 @@
             lucide.createIcons();
         }
 
-        // --- UI İŞLEMLERİ ---
+        // --- UI ---
         function filter(cat) {
             currentFilter = cat;
             document.querySelectorAll('.cat-btn').forEach(b => {
@@ -211,9 +217,8 @@
             document.getElementById('note-title').value = note.title;
             document.getElementById('note-content').innerHTML = note.content;
             
-            const delBtn = document.getElementById('btn-delete');
-            delBtn.classList.remove('hidden');
-            delBtn.onclick = function() { initiateDelete(id); };
+            document.getElementById('btn-delete').classList.remove('hidden');
+            document.getElementById('btn-delete').onclick = function() { initiateDelete(id); };
 
             setCategory(note.category || 'guncel');
             setFont(note.font || 'font-hand');
@@ -244,6 +249,7 @@
             setTimeout(() => {
                 document.getElementById('note-modal').classList.add('hidden');
                 document.getElementById('ai-popup').classList.add('hidden');
+                if(isListening) toggleVoice();
             }, 300);
         }
 
@@ -266,118 +272,98 @@
             editor.className = `w-full h-full min-h-[50vh] p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
         }
 
-        // --- ÖZELLİKLER ---
+        function applyColor(color) {
+            document.execCommand('foreColor', false, color);
+        }
 
-        // 1. Sihirli Seçim Menüsü
+        // --- GÖRSEL & KULLANIŞLILIK ---
         function checkSelection() {
             const selection = window.getSelection();
             const floatingMenu = document.getElementById('floating-menu');
-            
             if (selection.toString().trim().length > 0) {
                 const range = selection.getRangeAt(0);
                 const rect = range.getBoundingClientRect();
-                
-                // Menüyü seçimin hemen üzerine konumlandır
                 floatingMenu.style.top = `${rect.top - 50}px`; 
                 floatingMenu.style.left = `${rect.left + (rect.width / 2) - 60}px`;
                 floatingMenu.classList.remove('hidden');
-            } else {
-                floatingMenu.classList.add('hidden');
-            }
+            } else { floatingMenu.classList.add('hidden'); }
         }
 
         async function magicFixSelection() {
             const selection = window.getSelection();
             const text = selection.toString();
             if (!text) return;
-
             const floatingMenu = document.getElementById('floating-menu');
             floatingMenu.innerHTML = '<span class="animate-pulse text-xs">Sihir yapılıyor...</span>';
-
             const apiKey = localStorage.getItem('gemini_api_key');
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ 
-                        contents: [{ parts: [{ text: `Bu metin parçasındaki yazım yanlışlarını ve anlatım bozukluklarını düzelt. Sadece düzeltilmiş metni ver, başka açıklama yapma. Metin: ${text}` }] }] 
-                    })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: `Bu metni düzelt: ${text}` }] }] })
                 });
                 const data = await res.json();
                 const fixedText = data.candidates?.[0]?.content?.parts?.[0]?.text.trim();
-                
                 if (fixedText) {
                     document.execCommand('insertText', false, fixedText);
                     showToast("Sihirli değnek dokundu!", "success");
                 }
-            } catch (e) {
-                showToast("Sihir hatası!", "error");
-            } finally {
-                floatingMenu.innerHTML = `<button onclick="magicFixSelection()" class="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-transform hover:scale-105">
-                    <i data-lucide="wand-2" class="w-3 h-3"></i>
-                    <span class="text-xs font-bold">Düzelt</span>
-                </button>`;
+            } catch (e) { showToast("Sihir hatası!", "error"); } 
+            finally {
+                floatingMenu.innerHTML = `<button onclick="magicFixSelection()" class="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-transform hover:scale-105"><i data-lucide="wand-2" class="w-3 h-3"></i><span class="text-xs font-bold">Düzelt</span></button>`;
                 lucide.createIcons();
                 floatingMenu.classList.add('hidden');
             }
         }
 
-        // 2. Canlı İstatistikler
         function updateStats() {
             const text = document.getElementById('note-content').innerText;
             const wordCount = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
             const charCount = text.length;
-            const readTime = Math.ceil(wordCount / 200); // Ortalama okuma hızı
-            
+            const readTime = Math.ceil(wordCount / 200);
             document.getElementById('stat-words').innerText = `${wordCount} Kelime`;
-            document.getElementById('stat-chars').innerText = `${charCount} Karakter`;
             document.getElementById('stat-time').innerText = `${readTime} dk okuma`;
         }
 
-        // 3. Zen Modu
         function toggleZenMode() {
             isZenMode = !isZenMode;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.editor-toolbar');
-            
             if (isZenMode) {
                 modal.classList.add('!inset-0', '!max-w-none', '!rounded-none');
                 toolbar.classList.add('opacity-0', 'hover:opacity-100', 'transition-opacity');
                 document.getElementById('modal-cats').classList.add('hidden');
                 document.querySelector('#note-modal .border-b').classList.add('border-transparent');
-                showToast("Zen Modu: Çıkmak için ESC veya butona bas", "success");
-            } else {
-                exitZenMode();
-            }
+                showToast("Zen Modu", "success");
+            } else { exitZenMode(); }
         }
 
         function exitZenMode() {
             isZenMode = false;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.editor-toolbar');
-            
             modal.classList.remove('!inset-0', '!max-w-none', '!rounded-none');
             toolbar.classList.remove('opacity-0', 'hover:opacity-100', 'transition-opacity');
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('#note-modal .border-b').classList.remove('border-transparent');
         }
 
-        // 5. Slash Komutları (/tarih gibi)
         function handleSlashCommands(e) {
             const editor = document.getElementById('note-content');
             const selection = window.getSelection();
             if(!selection.rangeCount) return;
-            
             const range = selection.getRangeAt(0);
             const text = range.startContainer.textContent;
             
-            // Basit komutlar
             if (text.endsWith('/tarih')) {
-                document.execCommand('delete', false, null); // sil
-                const date = new Date().toLocaleDateString('tr-TR');
-                document.execCommand('insertText', false, date);
+                document.execCommand('delete', false, null);
+                document.execCommand('insertText', false, new Date().toLocaleDateString('tr-TR'));
+            } else if (text.endsWith('/imza')) {
+                document.execCommand('delete', false, null);
+                document.execCommand('insertHTML', false, '<b>- Barış Hoca</b>');
+            } else if (text.endsWith('/kontrol')) {
+                document.execCommand('delete', false, null);
+                document.execCommand('insertHTML', false, '☐ ');
             }
         }
 
@@ -393,7 +379,7 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            showToast("Yedek indirildi. Bunu saklayın!", "success");
+            showToast("Yedek indirildi.", "success");
         }
 
         function triggerImport() { document.getElementById('import-file').click(); }
@@ -409,13 +395,10 @@
                         const currentIds = new Set(notes.map(n => n.id));
                         let count = 0;
                         imported.forEach(n => {
-                            if(!currentIds.has(n.id)) {
-                                notes.push(n);
-                                count++;
-                            }
+                            if(!currentIds.has(n.id)) { notes.push(n); count++; }
                         });
                         saveToDisk();
-                        showToast(`${count} yeni not yüklendi!`, "success");
+                        showToast(`${count} not geri yüklendi!`, "success");
                         toggleSettings();
                     } else { showToast("Hatalı dosya.", "error"); }
                 } catch { showToast("Dosya okunamadı.", "error"); }
@@ -439,12 +422,11 @@
         }
 
         async function runAI(action) {
-            if(action !== 'generate_title') toggleAiMenu(); // Başlıkta menü kapanmasın
+            if(action !== 'generate_title') toggleAiMenu();
             
             const contentDiv = document.getElementById('note-content');
             const text = contentDiv.innerText;
 
-            // Başlık üretme hariç diğerlerinde metin lazım
             if(action !== 'generate_title' && !text.trim()) return showToast("Önce bir şeyler yazın!", "error");
             
             const apiKey = localStorage.getItem('gemini_api_key') ? localStorage.getItem('gemini_api_key').trim() : null;
@@ -455,85 +437,57 @@
 
             let prompt = "";
             const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
-            const highlightInstruction = "Ana fikirleri veya güçlü argümanları <span class='highlight-important'>bu şekilde kalın vurgula</span>, ikincil detayları <span class='highlight-blue'>mavi vurgula</span>. Paragrafları <br><br> ile ayır.";
+            
+            // YENİ: Çok Renkli Vurgulama Talimatı
+            const multiColorHighlight = `
+                Önemli noktaları ve can alıcı kelimeleri vurgulamak için şu HTML sınıflarını rastgele ve metnin akışına uygun şekilde kullanarak renklendir:
+                <span class='highlight-yellow'>Sarı Vurgu</span>, 
+                <span class='highlight-green'>Yeşil Vurgu</span>, 
+                <span class='highlight-pink'>Pembe Vurgu</span>, 
+                <span class='highlight-purple'>Mor Vurgu</span>, 
+                <span class='highlight-blue'>Mavi Vurgu</span>, 
+                <span class='highlight-orange'>Turuncu Vurgu</span>.
+                Metin rengarenk, canlı ve dikkat çekici olsun. Sadece bold yapma, bu renkleri mutlaka kullan.
+            `;
             
             const persona = `
-                Sen Barış'ın kendisisin. 
-                Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak veya analiz etmek.
-                ASLA "Yazar burada şunu diyor" veya "Özetle" gibi dışarıdan bir dil kullanma.
-                Üslup: Samimi, iddialı ve profesyonel bir köşe yazarı gibi.
+                Sen Barış'ın kendisisin. Bir öğretmensin ve blog yazarısın.
+                Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
+                ASLA "Yazar burada şunu diyor" deme.
             `;
 
             if (action === 'generate_title') {
-                prompt = `Bu metni analiz et ve Barış'ın üslubuna uygun, çarpıcı, kısa (maksimum 5 kelime) bir başlık yaz. Sadece başlığı ver, başka hiçbir şey yazma. Tırnak işareti kullanma. Metin: ${text}`;
+                prompt = `Bu metni analiz et ve Barış'ın üslubuna uygun, çarpıcı, kısa (maksimum 5 kelime) bir başlık yaz. Sadece başlığı ver. Metin: ${text}`;
             }
-            else if (action === 'extract_tasks') {
-                prompt = `Bu metindeki yapılacak işleri, görevleri veya aksiyonları çıkar. 
-                Çıktıyı HTML checklist formatında ver: <ul class='space-y-2 font-mono text-sm bg-yellow-50 p-4 rounded-lg'><li><label class='flex items-center gap-2'><input type='checkbox' class='accent-indigo-600'> <span>Görev 1</span></label></li>...</ul>. 
-                Eğer net bir görev yoksa, metinden çıkarılabilecek potansiyel aksiyonları öner. Başlık olarak "<h3>📝 Yapılacaklar Listesi</h3>" ekle. Metin: ${text}`;
+            else if (action === 'analyze_mood') {
+                prompt = `Bu metnin duygu durumunu analiz et ve bunu TEK BİR EMOJİ ile ifade et. Sadece emojiyi ver. (Örn: 🤔, 😊, 😤). Metin: ${text}`;
             }
-            else if (action === 'critique') {
-                prompt = `Bu metindeki fikirlere "Şeytanın Avukatı" rolüyle yaklaş. 
-                Dostça ama sivri dilli bir karşıt görüş yazısı yaz. Eksik yönleri, mantık hatalarını veya alternatif bakış açılarını göster. 
-                HTML formatında, <div class='mt-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg'>...</div> içine al. 
-                Başlık olarak "<h3>😈 Eleştirel Bakış (Şeytanın Avukatı)</h3>" kullan. ${highlightInstruction} Metin: ${text}`;
+            else if (action === 'mind_map') {
+                prompt = `Bu metindeki ana kavramları hiyerarşik bir "Kavram Haritası" (Mind Map) olarak özetle.
+                Çıktıyı HTML unordered list (<ul>) yapısında ver.
+                Ana başlıklar <span class='highlight-purple font-bold'> bu şekilde</span>, alt başlıklar <span class='highlight-blue'> bu şekilde</span> olsun. Başlık: "<h3>🗺️ Kavram Haritası</h3>". Metin: ${text}`;
             }
-            else if (action === 'quiz') {
-                prompt = `Bu metni analiz et ve içeriğiyle ilgili 3 adet çoktan seçmeli soru hazırla. 
-                Cevabı HTML formatında ver. Her soru şu yapıda olsun: 
-                <div class='mt-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100'>
-                    <p class='font-bold text-indigo-900 mb-2'>❓ Soru</p>
-                    <ul class='space-y-1 text-sm text-indigo-800 ml-4 list-disc'><li>Seçenek A</li><li>Seçenek B</li><li>Seçenek C</li></ul>
-                    <details class='mt-2 cursor-pointer'><summary class='text-xs font-bold text-indigo-500 hover:text-indigo-700'>Cevabı Gör</summary><p class='mt-1 text-xs text-green-600 font-bold'>Doğru Cevap: ...</p></details>
-                </div>
+            else if (action === 'summarize_short') {
+                // KISA ÖZET - RENKLİ
+                prompt = `${persona}
+                Bu notları benim ağzımdan "Kısa ve Öz" bir şekilde özetle.
+                ${multiColorHighlight}
+                Sanki bir manifesto yazar gibi vurucu ve net olsun.
                 Metin: ${text}`;
             }
-            else if (action === 'eli5') {
-                prompt = `${persona} Bu metni 5 yaşında bir çocuğa anlatır gibi basitleştir. Karmaşık terimleri analojilerle (oyuncaklar, oyun parkı vb.) açıkla. Son derece samimi ve basit olsun. Başlık: "<h3>👶 Basitleştirilmiş Hali</h3>". ${htmlInstruction} Metin: ${text}`;
+            else if (action === 'blogify_short') {
+                prompt = `${persona}
+                Web sitem için "Kısa Köşe Yazısı" (Mikro-Blog) oluştur. Max 300 kelime.
+                ${multiColorHighlight}
+                Samimi, akıcı ve emojili olsun. Metin: ${text}`;
             }
-            // --- EĞİTİM ÖZELLİKLERİ ---
-            else if (action === 'lesson_plan') {
-                prompt = `Sen uzman bir eğitimcisin. Bu metni temel alarak profesyonel bir "Ders Planı" hazırla.
-                Şu başlıkları içersin: Konu, Hedef Kitle, Süre, Kazanımlar, Materyaller, Giriş, Gelişme (Etkinlikler) ve Sonuç/Değerlendirme.
-                Çıktıyı şık bir HTML formatında ver (Tablo veya kart yapısı kullanabilirsin). Başlık: "<h3>📅 Ders Planı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'worksheet') {
-                prompt = `Bu metinden öğrenciler için bir "Çalışma Kağıdı" (Worksheet) hazırla.
-                İçerik: 3 adet Boşluk Doldurma, 3 adet Doğru/Yanlış ve 1 adet Açık Uçlu Soru.
-                Çıktıyı yazdırılabilir tarzda temiz bir HTML olarak ver. Cevap anahtarını en alta, <details> etiketi ile gizlenmiş şekilde ekle. Başlık: "<h3>📝 Çalışma Kağıdı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'case_study') {
-                prompt = `Bu notlardaki bilgileri kullanarak gerçekçi bir "Örnek Vaka" (Case Study) veya senaryo kurgula.
-                Öğrenilen teorik bilgilerin pratikte nasıl uygulandığını gösteren bir hikaye olsun. Sonunda okuyucuya düşündürücü 2 soru sor.
-                HTML formatında ver. Başlık: "<h3>🕵️ Örnek Vaka Analizi</h3>". Metin: ${text}`;
-            }
-            // --- WEBMASTER & SEO ÖZELLİKLERİ (YENİ) ---
-            else if (action === 'seo_analysis') {
-                prompt = `Sen deneyimli bir SEO uzmanısın. Bu metni bir web sitesi içeriği olarak analiz et.
-                1. Önerilen Meta Title (max 60 karakter).
-                2. Önerilen Meta Description (max 160 karakter).
-                3. Hedeflenebilecek 5 Anahtar Kelime (Keywords).
-                4. İçerik İyileştirme Önerileri (Okunabilirlik, anahtar kelime yoğunluğu vb.).
-                Çıktıyı şık bir HTML panel içinde ver. Başlık: "<h3>🚀 SEO Analiz Raporu</h3>". Metin: ${text}`;
-            }
-            else if (action === 'blogify') {
-                prompt = `Bu notları, bir öğretmenin web sitesinde yayınlanacak profesyonel bir "Blog Yazısı" formatına dönüştür.
-                Dikkat Çekici bir Başlık (H1), Giriş, Alt Başlıklarla Bölünmüş Gelişme (H2, H3), Madde işaretleri ve Güçlü bir Sonuç/Çağrı (CTA) içersin.
-                HTML formatında ver. Metin: ${text}`;
-            }
-            else if (action === 'image_prompts') {
-                prompt = `Bu metnin konusuyla ilgili, bir web sitesinde veya blog yazısında "Öne Çıkan Görsel" (Featured Image) olarak kullanılabilecek 3 farklı Yapay Zeka Görsel İstemi (Prompt) yaz.
-                Promptlar İngilizce olsun (Midjourney/DALL-E için). Her biri farklı bir stil (Örn: Minimalist İllüstrasyon, Fotogerçekçi, Dijital Art) olsun.
-                HTML formatında ver. Başlık: "<h3>🎨 Görsel Tasarım Fikirleri</h3>". Metin: ${text}`;
-            }
-            // --- DİĞER ---
-            else if (action === 'fix') prompt = `${persona} Bu notları gramer açısından kusursuz hale getir. Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'summarize_short') prompt = `${persona} Bu notlardaki düşüncelerimin "Kısa ve Öz" halini istiyorum. Vurucu bir slogan gibi olsun. Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'summarize_long') prompt = `${persona} Bu notları "Detaylı ve Kapsamlı" bir şekilde ele al. Hiçbir detayı atlama. Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'formal') prompt = `${persona} Bu notları kurumsal bir dille yaz. Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'expand') prompt = `${persona} Argümanlarımı detaylandır. Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'continue') prompt = `${persona} Devamını getir (2-3 cümle). Metin: ${text}. ${htmlInstruction} ${highlightInstruction}`;
-            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. Format: METİN|||RENK_NO (1-5). Metin: ${text}`;
+            else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
+            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. HTML formatında. Metin: ${text}`;
+            else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
+            else if (action === 'fix') prompt = `${persona} Gramer açısından düzelt. ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
+            else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
+            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
@@ -547,26 +501,25 @@
 
                 if (action === 'whatsapp') {
                     const parts = result.split('|||');
-                    document.getElementById('wp-text').value = parts[0].trim();
-                    if(parts[1]) setWpColorIndex(parts[1].trim());
+                    document.getElementById('wp-text').innerHTML = parts[0].trim(); // HTML render etmesi için value yerine innerHTML
                     closeModal();
                     document.getElementById('wp-modal').classList.remove('hidden');
                 } else if (action === 'generate_title') {
                     document.getElementById('note-title').value = result.trim();
                     showToast("Başlık oluşturuldu!", "success");
-                } else if (['extract_tasks', 'critique', 'quiz', 'eli5', 'lesson_plan', 'worksheet', 'case_study', 'seo_analysis', 'image_prompts'].includes(action)) {
-                    // Mevcut içeriğin altına ekle
+                } else if (action === 'analyze_mood') {
+                    // Emojiyi başlığın başına ekle
+                    const titleEl = document.getElementById('note-title');
+                    titleEl.value = result.trim() + " " + titleEl.value;
+                    showToast("Ruh hali eklendi!", "success");
+                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map'].includes(action)) {
                     contentDiv.innerHTML += "<br><br>" + result;
                     contentDiv.scrollTop = contentDiv.scrollHeight;
-                } else if (action === 'blogify') {
-                    // İçeriği tamamen değiştir
-                    contentDiv.innerHTML = result;
                 } else {
-                    if (action === 'continue') contentDiv.innerHTML += " " + result;
-                    else contentDiv.innerHTML = result;
+                    contentDiv.innerHTML = result; 
                 }
 
-                if(action !== 'generate_title') showToast("İşlem tamamlandı!", "success");
+                if(action !== 'generate_title' && action !== 'analyze_mood') showToast("İşlem tamamlandı!", "success");
 
             } catch (err) {
                 showToast("AI Hatası: " + err.message, "error");
@@ -578,17 +531,12 @@
 
         // --- WhatsApp ---
         function openWhatsAppMode() {
-            const content = document.getElementById('note-content').innerText;
-            document.getElementById('wp-text').value = content;
-            checkWpLimit();
+            // Textarea yerine div kullanarak HTML renklerini göstereceğiz
+            const content = document.getElementById('note-content').innerHTML; 
+            document.getElementById('wp-text').innerHTML = content;
             document.getElementById('wp-modal').classList.remove('hidden');
         }
         function closeWp() { document.getElementById('wp-modal').classList.add('hidden'); }
-        function checkWpLimit() {
-            const len = document.getElementById('wp-text').value.length;
-            document.getElementById('wp-count').innerText = `${len}/700`;
-            document.getElementById('wp-count').className = len > 700 ? "text-red-500 font-bold" : "text-gray-400 font-mono";
-        }
         function setWpColorIndex(idx) {
             const colors = ['#25D366', '#FF5252', '#448AFF', '#7C4DFF', '#212121'];
             document.getElementById('wp-preview').style.backgroundColor = colors[parseInt(idx)-1] || colors[0];
@@ -596,18 +544,60 @@
         function setWpColor(c) { document.getElementById('wp-preview').style.backgroundColor = c; }
         
         function saveWpToNote() {
-            const text = document.getElementById('wp-text').value;
+            const htmlContent = document.getElementById('wp-text').innerHTML;
             currentNoteId = null;
             document.getElementById('note-title').value = "Durum - " + new Date().toLocaleDateString();
-            document.getElementById('note-content').innerHTML = text;
+            document.getElementById('note-content').innerHTML = htmlContent;
             currentCat = 'diger';
             currentFont = 'font-hand';
             saveCurrentNote();
             closeWp();
         }
 
-        // --- Diğer ---
-        function toggleStealth() { /* Kaldırıldı ama fonksiyon hatasını önlemek için boş bıraktım */ }
+        // --- Ses ---
+        function setupVoice() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'tr-TR';
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                
+                recognition.onresult = (e) => {
+                    let final = '';
+                    for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
+                    if(final) {
+                        const el = document.getElementById('note-content');
+                        el.innerHTML += (el.innerHTML ? ' ' : '') + final;
+                        if(isListening && document.body.classList.contains('stealth-mode')) document.getElementById('stealth-text').innerText = final;
+                    }
+                };
+                recognition.onend = () => { if(isListening) try{recognition.start()}catch{} else updateMicState(false); };
+            }
+        }
+        function toggleVoice() {
+            if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
+            isListening = !isListening;
+            updateMicState(isListening);
+            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} } 
+            else { try{ recognition.stop(); }catch{} }
+        }
+        function updateMicState(on) {
+            const btn = document.getElementById('mic-btn');
+            if(on) { 
+                btn.classList.add('animate-pulse', 'bg-red-500', 'text-white'); 
+                btn.innerHTML = '<i data-lucide="mic-off"></i>';
+            } else { 
+                btn.classList.remove('animate-pulse', 'bg-red-500', 'text-white'); 
+                btn.innerHTML = '<i data-lucide="mic"></i>';
+            }
+            lucide.createIcons();
+        }
+
+        function toggleStealth() {
+            document.body.classList.toggle('stealth-mode');
+            if(document.body.classList.contains('stealth-mode')) { if(!isListening) toggleVoice(); }
+        }
 
         function showToast(msg, type) {
             const div = document.createElement('div');
@@ -673,9 +663,13 @@
         /* Placeholder */
         [contenteditable]:empty:before { content: attr(placeholder); color: #9ca3af; display: block; }
         
-        /* Highlights */
-        .highlight-important { color: #c2410c; font-weight: 700; background-color: #ffedd5; padding: 0 2px; }
-        .highlight-blue { color: #1d4ed8; font-weight: 600; }
+        /* ÇOK RENKLİ VURGULAR (Marker Style) */
+        .highlight-yellow { background-color: #fef08a; color: #854d0e; padding: 0 4px; border-radius: 4px; }
+        .highlight-green { background-color: #bbf7d0; color: #166534; padding: 0 4px; border-radius: 4px; }
+        .highlight-pink { background-color: #fbcfe8; color: #9d174d; padding: 0 4px; border-radius: 4px; }
+        .highlight-blue { background-color: #bfdbfe; color: #1e40af; padding: 0 4px; border-radius: 4px; }
+        .highlight-purple { background-color: #e9d5ff; color: #6b21a8; padding: 0 4px; border-radius: 4px; }
+        .highlight-orange { background-color: #fed7aa; color: #9a3412; padding: 0 4px; border-radius: 4px; }
 
         /* Stealth Mode */
         body.stealth-mode { background: #000 !important; overflow: hidden; }
@@ -702,8 +696,8 @@
             </div>
             
             <div class="flex items-center gap-1">
-                <button onclick="toggleSettings()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500" title="Ayarlar & Yedekleme"><i data-lucide="settings" class="w-5 h-5"></i></button>
-                <button onclick="openWhatsAppMode()" class="p-2 rounded-full hover:bg-green-50 text-green-600" title="WhatsApp Modu"><i data-lucide="smartphone" class="w-5 h-5"></i></button>
+                <button onclick="toggleSettings()" class="p-2 bg-green-50 text-green-700 font-bold text-xs rounded-lg border border-green-200 hover:bg-green-100 flex items-center gap-1 shadow-sm transition-colors" title="Yedekleme"><i data-lucide="save" class="w-4 h-4"></i> Yedek</button>
+                <button onclick="toggleStealth()" class="p-2 rounded-full hover:bg-gray-100 text-gray-500" title="Gizli Mod"><i data-lucide="eye-off" class="w-5 h-5"></i></button>
             </div>
         </div>
 
@@ -794,39 +788,49 @@
 
             <!-- Toolbar -->
             <div class="editor-toolbar p-3 pb-safe border-t border-gray-100 transition-opacity">
-                <div class="flex justify-between items-center max-w-lg mx-auto">
-                    <div class="flex gap-1">
-                        <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-sm">Aa</button>
-                        <button onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-sm">Aa</button>
-                        <button onclick="setFont('font-sans')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-sans text-sm">Aa</button>
+                <div class="flex flex-col gap-2 max-w-lg mx-auto">
+                    <!-- Renkler -->
+                    <div class="flex gap-2 overflow-x-auto py-1 no-scrollbar justify-center">
+                        <button onclick="applyColor('#000000')" class="w-5 h-5 rounded-full bg-black border border-gray-200" title="Siyah"></button>
+                        <button onclick="applyColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600 border border-gray-200" title="Kırmızı"></button>
+                        <button onclick="applyColor('#ea580c')" class="w-5 h-5 rounded-full bg-orange-600 border border-gray-200" title="Turuncu"></button>
+                        <button onclick="applyColor('#ca8a04')" class="w-5 h-5 rounded-full bg-yellow-600 border border-gray-200" title="Altın"></button>
+                        <button onclick="applyColor('#16a34a')" class="w-5 h-5 rounded-full bg-green-600 border border-gray-200" title="Yeşil"></button>
+                        <button onclick="applyColor('#2563eb')" class="w-5 h-5 rounded-full bg-blue-600 border border-gray-200" title="Mavi"></button>
+                        <button onclick="applyColor('#9333ea')" class="w-5 h-5 rounded-full bg-purple-600 border border-gray-200" title="Mor"></button>
                     </div>
-                    <div class="w-px h-6 bg-gray-200 mx-2"></div>
-                    <div class="flex gap-2">
-                        <button onclick="toggleZenMode()" class="p-3 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors shadow-sm" title="Zen Modu"><i data-lucide="maximize" class="w-5 h-5"></i></button>
-                        <div class="relative">
-                            <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm ring-2 ring-indigo-100 ring-offset-1"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
-                            <div id="ai-popup" class="absolute bottom-16 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 hidden z-30 transform origin-bottom-right transition-all">
-                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Web & SEO</div>
-                                <button onclick="runAI('blogify')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="newspaper" class="w-4 h-4"></i> Blog Yazısına Çevir</button>
-                                <button onclick="runAI('seo_analysis')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="search-check" class="w-4 h-4"></i> SEO Analizi</button>
-                                <button onclick="runAI('image_prompts')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700"><i data-lucide="image-plus" class="w-4 h-4"></i> Görsel Fikirleri</button>
-                                
-                                <div class="h-px bg-gray-100 my-1"></div>
-                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Eğitim Üretimi</div>
-                                <button onclick="runAI('lesson_plan')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="calendar-days" class="w-4 h-4"></i> Ders Planı Hazırla</button>
-                                <button onclick="runAI('worksheet')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700"><i data-lucide="file-question" class="w-4 h-4"></i> Çalışma Kağıdı</button>
-                                <button onclick="runAI('case_study')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="user-search" class="w-4 h-4"></i> Vaka Analizi (Senaryo)</button>
-                                
-                                <div class="h-px bg-gray-100 my-1"></div>
-                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Analiz</div>
-                                <button onclick="runAI('quiz')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="brain-circuit" class="w-4 h-4"></i> Sınav Yap (Quiz)</button>
-                                <button onclick="runAI('eli5')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="baby" class="w-4 h-4"></i> 5 Yaşında Gibi Anlat</button>
-                                
-                                <div class="h-px bg-gray-100 my-1"></div>
-                                <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
-                                <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
-                                <button onclick="runAI('summarize_short')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="scissors" class="w-4 h-4 text-rose-500"></i> Kısa Özet</button>
-                                <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700 font-medium"><i data-lucide="smartphone" class="w-4 h-4"></i> WhatsApp Modu</button>
+                    
+                    <div class="flex justify-between items-center w-full">
+                        <div class="flex gap-1">
+                            <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-sm">Aa</button>
+                            <button onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-sm">Aa</button>
+                            <button onclick="setFont('font-sans')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-sans text-sm">Aa</button>
+                        </div>
+                        <div class="w-px h-6 bg-gray-200 mx-2"></div>
+                        <div class="flex gap-2">
+                            <button onclick="toggleZenMode()" class="p-3 rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 transition-colors shadow-sm" title="Zen Modu"><i data-lucide="maximize" class="w-5 h-5"></i></button>
+                            <button onclick="toggleVoice()" id="mic-btn" class="p-3 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors shadow-sm"><i data-lucide="mic" class="w-5 h-5"></i></button>
+                            <div class="relative">
+                                <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm ring-2 ring-indigo-100 ring-offset-1"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
+                                <div id="ai-popup" class="absolute bottom-16 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 hidden z-30 transform origin-bottom-right transition-all">
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Web & SEO</div>
+                                    <button onclick="runAI('blogify_short')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700 font-bold bg-indigo-50"><i data-lucide="newspaper" class="w-4 h-4"></i> Mikro-Blog (Site İçin)</button>
+                                    <button onclick="runAI('seo_analysis')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="search-check" class="w-4 h-4"></i> SEO Analizi</button>
+                                    <button onclick="runAI('image_prompts')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700"><i data-lucide="image-plus" class="w-4 h-4"></i> Görsel Fikirleri</button>
+                                    
+                                    <div class="h-px bg-gray-100 my-1"></div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Eğitim & Analiz</div>
+                                    <button onclick="runAI('analyze_mood')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="smile" class="w-4 h-4"></i> Duygu Durumu (Mood)</button>
+                                    <button onclick="runAI('mind_map')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="network" class="w-4 h-4"></i> Kavram Haritası</button>
+                                    <button onclick="runAI('extract_tasks')" class="w-full text-left px-3 py-2 hover:bg-yellow-50 rounded-lg text-sm flex items-center gap-2 text-yellow-700"><i data-lucide="list-todo" class="w-4 h-4"></i> Görevleri Çıkar</button>
+                                    <button onclick="runAI('quiz')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="brain-circuit" class="w-4 h-4"></i> Sınav Yap (Quiz)</button>
+                                    
+                                    <div class="h-px bg-gray-100 my-1"></div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
+                                    <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
+                                    <button onclick="runAI('summarize_short')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="scissors" class="w-4 h-4 text-rose-500"></i> Kısa Özet (Benim Dilim)</button>
+                                    <button onclick="openWhatsAppMode()" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700 font-medium"><i data-lucide="smartphone" class="w-4 h-4"></i> WhatsApp Modu</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -835,15 +839,16 @@
         </div>
     </div>
 
-    <!-- WhatsApp Modal -->
+    <!-- WhatsApp Modal (Textarea yerine Div) -->
     <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
             <div class="p-4 flex justify-between items-center bg-gray-800">
                 <button onclick="closeWp()" class="text-white p-2 hover:bg-white/10 rounded-full"><i data-lucide="x"></i></button>
-                <span class="text-xs font-mono text-gray-400 bg-black/30 px-2 py-1 rounded" id="wp-count">0/700</span>
+                <span class="text-xs font-mono text-gray-400 bg-black/30 px-2 py-1 rounded" id="wp-count">Görsel</span>
             </div>
             <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500 relative" style="background-color: #25D366;">
-                <textarea id="wp-text" class="w-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:ring-0 resize-none overflow-hidden placeholder-white/50" rows="10" placeholder="Durum yazısı..." oninput="checkWpLimit()"></textarea>
+                <!-- contenteditable div for HTML rendering -->
+                <div id="wp-text" contenteditable="true" class="w-full h-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:outline-none overflow-y-auto flex flex-col justify-center items-center break-words p-2"></div>
             </div>
             <div class="p-4 bg-gray-900 space-y-4 border-t border-gray-800">
                 <div class="flex justify-center gap-4 overflow-x-auto py-2">
