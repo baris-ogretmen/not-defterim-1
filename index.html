@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v40'; // V40 - Çift Motorlu Link (Kesin Çözüm)
+        const CURRENT_KEY = 'baris_final_notes_v40'; // V40 - iOS Link Fix Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -75,7 +75,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v39');
+                 const prevData = localStorage.getItem('baris_final_notes_v39') || localStorage.getItem('baris_final_notes_v38');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -351,7 +351,7 @@
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
 
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: `Bu metni düzelt: ${text}` }] }] })
                 });
                 const data = await res.json();
@@ -410,7 +410,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V36 FİNAL - KESİN ÇÖZÜM) ---
+        // --- YOUTUBE ASİSTANI (V40 FİNAL - IPHONE LINK FIX) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -418,11 +418,6 @@
             document.getElementById('yt-modal').classList.add('hidden');
         }
         
-        // Bu fonksiyon artık bir yönlendirme yapıcı olarak çalışacak
-        function goToUrl(url) {
-            window.location.href = url;
-        }
-
         async function processYouTubeTranscript() {
             const transcript = document.getElementById('yt-transcript').value;
             if(transcript.includes("http://") || transcript.includes("https://") || transcript.includes("youtube.com")) {
@@ -628,7 +623,7 @@
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
 
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
@@ -746,21 +741,6 @@
             setTimeout(() => div.remove(), 3000);
         }
         
-        // KOPYALAMA YARDIMCISI (SAF HTML)
-        function copyLink(text) {
-             const textArea = document.createElement("textarea");
-             textArea.value = text;
-             textArea.style.position = "fixed"; textArea.style.left = "-9999px";
-             document.body.appendChild(textArea);
-             textArea.focus(); textArea.select();
-             try {
-                 document.execCommand('copy');
-                 showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
-             } catch (err) {
-                 showToast("Kopyalama başarısız.", "error");
-             }
-             document.body.removeChild(textArea);
-        }
     </script>
 
     <style>
@@ -903,7 +883,7 @@
         </button>
     </div>
 
-    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK) -->
+    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK + IPHONE UYUMLU) -->
     <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
@@ -917,11 +897,11 @@
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
-                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz) -->
-                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz, iPhone uyumlu) -->
+                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             Sunucu 1 (Git)
                         </a>
-                        <a href="[https://downsub.com/](https://downsub.com/)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" rel="noopener noreferrer" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                              Sunucu 2 (Git)
                         </a>
                     </div>
