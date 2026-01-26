@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v36'; // V36 - iPhone Hedefsiz Link Fix
+        const CURRENT_KEY = 'baris_final_notes_v37'; // V37 - Link Kesin Çözüm Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -31,7 +31,8 @@
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
             'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
-            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34', 'baris_final_notes_v35'
+            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34',
+            'baris_final_notes_v35', 'baris_final_notes_v36'
         ];
         
         let notes = [];
@@ -72,8 +73,9 @@
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
+            // Eğer evrensel boşsa, bir önceki sürümden (V36 veya öncesi) kurtarmayı dene
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v35');
+                 const prevData = localStorage.getItem('baris_final_notes_v36') || localStorage.getItem('baris_final_notes_v35');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -147,7 +149,7 @@
             textArea.focus(); textArea.select();
             try {
                 document.execCommand('copy');
-                showToast("Adres kopyalandı! Şimdi Safari'ye yapıştır.", "success");
+                showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
             } catch (err) {
                 showToast("Kopyalama başarısız.", "error");
             }
@@ -630,7 +632,7 @@
 
                 if(!result) throw new Error("Boş yanıt.");
 
-                // HTML Kodu Temizleme
+                // HTML Kodu Temizleme (Regex)
                 let cleanResult = result.replace(/^```html\s*/i, '').replace(/```$/, '').trim();
 
                 if (action === 'whatsapp') {
@@ -911,7 +913,7 @@
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
                         <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz - KESİN ÇÖZÜM) -->
-                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             Siteye Git
                         </a>
                     </div>
