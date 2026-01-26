@@ -13,13 +13,14 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v36'; // V36 - Tags & Links Fixed
+        const CURRENT_KEY = 'baris_final_notes_v37'; // V37 - Kesin Link Çözümü
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
-        // Eski versiyon anahtarları
+        // Tüm eski versiyon anahtarları (Kurtarma için)
         const LEGACY_KEYS = [
             'baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v30', 
-            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34'
+            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34',
+            'baris_final_notes_v35', 'baris_final_notes_v36'
         ];
         
         let notes = [];
@@ -61,6 +62,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
+                 // En son çalışan versiyonlardan veriyi çekmeyi dene
                  const prevData = localStorage.getItem('baris_final_notes_v34') || localStorage.getItem('baris_final_notes_v30');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
@@ -396,7 +398,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V36 - FIXED) ---
+        // --- YOUTUBE ASİSTANI (V37 - KESİN ÇÖZÜM) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -541,7 +543,7 @@
                  ${multiColorHighlight}
                  Metin: ${text}`;
             }
-            // DİĞER AKSİYONLAR (Kısaltıldı)
+            // DİĞER AKSİYONLAR
             else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
             else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
             else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
@@ -549,18 +551,17 @@
             else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
             else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
-            // Eksik kalanlar:
-            else if (action === 'generate_rubric') { prompt = `Rubrik hazırla. HTML tablo. ${multiColorHighlight} Metin: ${text}`; }
-            else if (action === 'generate_hashtags') { prompt = `Hashtag üret. Liste. Metin: ${text}`; }
-            else if (action === 'generate_analogy') { prompt = `${persona} Analoji (benzetme) yap. ${multiColorHighlight} Metin: ${text}`; }
-            else if (action === 'email_formal') { prompt = `Resmi e-posta yaz. Metin: ${text}`; }
-            else if (action === 'generate_references') { prompt = `Kaynakça öner. Metin: ${text}`; }
-            else if (action === 'iep_goals') { prompt = `${persona} BEP hedefi yaz. Metin: ${text}`; }
-            else if (action === 'adapt_activity') { prompt = `${persona} Etkinlik uyarla (İnklüzyon). Metin: ${text}`; }
-            else if (action === 'parent_message') { prompt = `${persona} Veli mesajı yaz. Metin: ${text}`; }
-            else if (action === 'socratic_questions') { prompt = `Sokratik sorular üret. Metin: ${text}`; }
-            else if (action === 'summarize_short') { prompt = `${persona} Kısa özetle. ${multiColorHighlight} Metin: ${text}`; }
-            else if (action === 'blogify_short') { prompt = `${persona} Mikro-blog yaz. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'generate_rubric') prompt = `Bu metindeki görev/konu için 4 seviyeli Rubrik hazırla. HTML Tablo. Metin: ${text}`;
+            else if (action === 'generate_hashtags') prompt = `Bu metin için popüler 15 Türkçe Hashtag öner. Metin: ${text}`;
+            else if (action === 'generate_analogy') prompt = `${persona} Bu metni basit bir analoji (benzetme) ile anlat. Metin: ${text}`;
+            else if (action === 'email_formal') prompt = `Bu notları resmi bir e-postaya dönüştür. Metin: ${text}`;
+            else if (action === 'generate_references') prompt = `Bu konuyla ilgili kaynakça öner. Metin: ${text}`;
+            else if (action === 'iep_goals') prompt = `${persona} Bu konuyla ilgili BEP hedefi yaz. Metin: ${text}`;
+            else if (action === 'adapt_activity') prompt = `${persona} Bu etkinliği özel gereksinimli öğrenci için uyarla. Metin: ${text}`;
+            else if (action === 'parent_message') prompt = `${persona} Veli bilgilendirme mesajı yaz. Metin: ${text}`;
+            else if (action === 'socratic_questions') prompt = `Sokratik sorular üret. Metin: ${text}`;
+            else if (action === 'summarize_short') prompt = `${persona} Kısa ve öz özetle. Metin: ${text}`;
+            else if (action === 'blogify_short') prompt = `${persona} Web sitem için kısa köşe yazısı yaz. Metin: ${text}`;
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
