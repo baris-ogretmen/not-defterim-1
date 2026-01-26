@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v33'; // V33 - Kesin Link Çözümü (Copy Fallback)
+        const CURRENT_KEY = 'baris_final_notes_v34'; // V34 - iPhone Garantili Link
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -30,7 +30,8 @@
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31', 'baris_final_notes_v32'
+            'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
+            'baris_final_notes_v32', 'baris_final_notes_v33'
         ];
         
         let notes = [];
@@ -71,8 +72,9 @@
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
+            // Eğer evrensel boşsa ve önceki sürüm varsa oradan al
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v32');
+                 const prevData = localStorage.getItem('baris_final_notes_v30') || localStorage.getItem('baris_final_notes_v32');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -407,7 +409,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V32 - Link Kesin Düzeltme) ---
+        // --- YOUTUBE ASİSTANI (V32 - HTML LINK FIX) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -551,7 +553,6 @@
                  ${multiColorHighlight}
                  Metin: ${text}`;
             }
-            // YENİ EKLENEN ÖZELLİKLER (V26)
             else if (action === 'generate_rubric') {
                 prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla.
                 HTML Tablosu (<table>) formatında ver.
@@ -576,7 +577,6 @@
                 prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele.
                 Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
             }
-            // DİĞER MODÜLLER
             else if (action === 'iep_goals') {
                 prompt = `${persona}
                 Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz.
@@ -893,7 +893,7 @@
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur (Linklere Tıkla):</p>
                     <div class="flex gap-2">
-                        <!-- SAF HTML LINKLER (Javascriptsiz) -->
+                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz) -->
                         <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             Sunucu 1 (Git)
                         </a>
@@ -1096,4 +1096,3 @@
 
 </body>
 </html>
-
