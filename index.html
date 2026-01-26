@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v30'; // V30 - Link Kesin Çözüm Final
+        const CURRENT_KEY = 'baris_final_notes_v31'; // V31 - Link Fix Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -30,7 +30,7 @@
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29'
+            'baris_final_notes_v29', 'baris_final_notes_v30'
         ];
         
         let notes = [];
@@ -72,7 +72,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v29');
+                 const prevData = localStorage.getItem('baris_final_notes_v30');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -407,7 +407,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V30 - LİNK KESİN ÇÖZÜM) ---
+        // --- YOUTUBE ASİSTANI (V29 - SAF HTML LINK) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -949,6 +949,13 @@
             <div class="flex-1 relative bg-white group overflow-y-auto flex flex-col">
                 <div id="note-content" contenteditable="true" class="w-full flex-1 p-6 lg:p-8 outline-none text-lg leading-relaxed font-hand text-gray-700" placeholder="Notunuzu buraya yazın..."></div>
                 
+                <!-- Canlı İstatistikler -->
+                <div class="px-6 py-2 bg-white border-t border-gray-50 flex gap-4 text-[10px] text-gray-400 font-mono select-none">
+                    <span id="stat-words">0 Kelime</span>
+                    <span id="stat-chars">0 Karakter</span>
+                    <span id="stat-time">0 dk okuma</span>
+                </div>
+
                 <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
                     <div class="loader mb-3"></div>
                     <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
