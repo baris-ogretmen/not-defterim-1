@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v31'; // V31 - Link Fix Final
+        const CURRENT_KEY = 'baris_final_notes_v32'; // V32 - Link Kesin Düzeltme Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -30,7 +30,7 @@
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29', 'baris_final_notes_v30'
+            'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31'
         ];
         
         let notes = [];
@@ -72,7 +72,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v30');
+                 const prevData = localStorage.getItem('baris_final_notes_v31');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -407,12 +407,21 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V29 - SAF HTML LINK) ---
+        // --- YOUTUBE ASİSTANI (V31 GÜNCEL) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
         function closeYouTubeMode() {
             document.getElementById('yt-modal').classList.add('hidden');
+        }
+        
+        // BU FONKSİYON ARTIK GEREKSİZ (HREF İLE ÇÖZÜLDÜ) AMA YEDEK OLARAK KALSIN
+        function openTranscriptSite(service) {
+            let url = '';
+            // GÜNCELLENMİŞ LİNKLER (HATA YOK)
+            if (service === 1) url = 'https://youtubetranscript.com/';
+            else if (service === 2) url = 'https://downsub.com/';
+            window.open(url, '_blank');
         }
         
         async function processYouTubeTranscript() {
@@ -503,7 +512,7 @@
             let prompt = "";
             const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
             
-            // "KIRMIZI KALEM" & FOSFORLU VURGU
+            // "KIRMIZI KALEM" & FOSFORLU VURGU (Okunabilirlik Odaklı)
             const multiColorHighlight = `
                 Önemli noktaları ve can alıcı kelimeleri şu HTML sınıflarını kullanarak vurgula:
                 <span class='highlight-red'>Kırmızı Vurgu</span> (Çok önemli),
@@ -534,7 +543,7 @@
                 Sloganvari ara başlıklar kullan.
                 Metin: ${text}`;
             }
-            // PEDAGOJİK ÖZELLİKLER
+            // YENİ: PEDAGOJİK ZEKA (GELİŞMİŞ)
             else if (action === 'pedagogical_organizer') {
                  prompt = `${persona}
                  Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ.
@@ -551,32 +560,7 @@
                  ${multiColorHighlight}
                  Metin: ${text}`;
             }
-            // YENİ EKLENEN ÖZELLİKLER (V26)
-            else if (action === 'generate_rubric') {
-                prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla.
-                HTML Tablosu (<table>) formatında ver.
-                Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'generate_hashtags') {
-                prompt = `Bu metin için sosyal medyada (Instagram, Twitter, LinkedIn) etkileşimi artıracak, konuyla ilgili en popüler 15 adet Türkçe Hashtag (#) öner.
-                Liste olarak ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_analogy') {
-                prompt = `${persona}
-                Bu metindeki ana konuyu veya en karmaşık kavramı, günlük hayattan herkesin anlayabileceği basit ve akılda kalıcı bir ANALOJİ (benzetme) kullanarak açıkla.
-                (Örn: Trafik, Futbol, Yemek Yapmak vb.).
-                Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'email_formal') {
-                prompt = `Bu notları, bir yöneticiye, resmi kuruma veya veliye gönderilecek resmi, nazik ve profesyonel bir e-posta taslağına dönüştür.
-                Konu satırı ekle.
-                Başlık: "<h3>📧 E-Posta Taslağı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_references') {
-                prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele.
-                Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
-            }
-            // DİĞER MODÜLLER
+            // YENİ: ÖZEL EĞİTİM MODÜLLERİ
             else if (action === 'iep_goals') {
                 prompt = `${persona}
                 Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz.
@@ -618,6 +602,11 @@
             else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
             else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'generate_rubric') prompt = `Bu metindeki görev/konu için 4 seviyeli bir rubrik hazırla. HTML Tablosu ver. Başlık: "<h3>📊 Rubrik</h3>". ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'generate_hashtags') prompt = `Bu metin için 15 adet popüler Türkçe hashtag öner. Başlık: "<h3>#️⃣ Etiketler</h3>". Metin: ${text}`;
+            else if (action === 'generate_analogy') prompt = `${persona} Bu konuyu basit bir analojiyle anlat. Başlık: "<h3>💡 Analoji</h3>". ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'email_formal') prompt = `Bu notlardan resmi bir e-posta taslağı oluştur. Başlık: "<h3>📧 E-Posta</h3>". Metin: ${text}`;
+            else if (action === 'generate_references') prompt = `Bu metindeki konuya uygun 3 adet akademik kaynakça önerisi listele. Başlık: "<h3>📚 Kaynakça</h3>". Metin: ${text}`;
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
@@ -893,7 +882,7 @@
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur (Linklere Tıkla):</p>
                     <div class="flex gap-2">
-                        <!-- SAF HTML LINKLER (Javascriptsiz) -->
+                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz) -->
                         <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             Sunucu 1 (Git)
                         </a>
@@ -949,13 +938,6 @@
             <div class="flex-1 relative bg-white group overflow-y-auto flex flex-col">
                 <div id="note-content" contenteditable="true" class="w-full flex-1 p-6 lg:p-8 outline-none text-lg leading-relaxed font-hand text-gray-700" placeholder="Notunuzu buraya yazın..."></div>
                 
-                <!-- Canlı İstatistikler -->
-                <div class="px-6 py-2 bg-white border-t border-gray-50 flex gap-4 text-[10px] text-gray-400 font-mono select-none">
-                    <span id="stat-words">0 Kelime</span>
-                    <span id="stat-chars">0 Karakter</span>
-                    <span id="stat-time">0 dk okuma</span>
-                </div>
-
                 <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
                     <div class="loader mb-3"></div>
                     <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
