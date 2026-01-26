@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v27'; // V27 - Bio Site & Uzun Özet Eklendi
+        const CURRENT_KEY = 'baris_final_notes_v29_special_ed'; // V29 - Özel Eğitim Odaklı (Sosyal Öykü, Çizelge, Görselleştirme)
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
        
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -28,7 +28,7 @@
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22',
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26'
+            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28'
         ];
        
         let notes = [];
@@ -67,7 +67,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v26'); // v26 kontrolü
+                 const prevData = localStorage.getItem('baris_final_notes_v28'); // v28 kontrolü
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -553,7 +553,7 @@
                 ${multiColorHighlight}
                 Samimi, akıcı ve emojili olsun. Metin: ${text}`;
             }
-            // --- YENİ EKLENEN V27 ÖZELLİKLERİ ---
+            // --- V28 BIO & KİŞİSEL MARKA ARAÇLARI ---
             else if (action === 'bio_site') {
                 prompt = `${persona}
                 Bu metni veya notları analiz ederek, "Bio Site" (Linktree, Kişisel Web Sitesi vb.) için kullanılabilecek profesyonel ama samimi bir "Hakkımda / Profil" yazısı oluştur.
@@ -563,6 +563,52 @@
                 Başlık: "<h3>👤 Bio Site Yazısı (Profil)</h3>".
                 Metin: ${text}`;
             }
+            else if (action === 'bio_short') {
+                prompt = `Bu metinden yola çıkarak Instagram, Twitter ve Linktree profilleri için 3 farklı alternatifte KISA (max 160 karakter), etkileyici ve emojili biyografi yazısı yaz.
+                Maddeler halinde ver.
+                Başlık: "<h3>📱 Kısa Sosyal Medya Biyografileri</h3>".
+                Metin: ${text}`;
+            }
+            else if (action === 'bio_services') {
+                prompt = `Bu metindeki yetenek, deneyim ve konulardan yola çıkarak, bio sitesine konulacak şık bir 'Neler Yapıyorum?' veya 'Hizmetlerim/Uzmanlıklarım' listesi oluştur.
+                İkna edici ve profesyonel olsun.
+                HTML <ul> (Liste) formatında ver.
+                Başlık: "<h3>💼 Neler Yaparım? (Hizmet Listesi)</h3>".
+                Metin: ${text}`;
+            }
+            else if (action === 'bio_slogan') {
+                prompt = `Bu kişinin vizyonunu ve notlardaki felsefesini yansıtan 3 adet kısa, akılda kalıcı ve motive edici SLOGAN (Motto) öner.
+                Tırnak içinde ver.
+                Başlık: "<h3>📢 Kişisel Slogan (Motto)</h3>".
+                Metin: ${text}`;
+            }
+            // --- V29 ÖZEL EĞİTİM (YENİ) ---
+            else if (action === 'social_story') {
+                prompt = `${persona}
+                Bu metindeki durumu veya davranışı baz alarak, otizmli veya özel gereksinimli bir öğrenci için Carol Gray'in 'Sosyal Öykü' (Social Story) formatına uygun bir hikaye yaz.
+                1. tekil şahıs ("Ben") dilini kullan.
+                Betimleyici ve olumlu cümleler kur ("...yapmalıyım" yerine "...yapabilirim" veya "...yapmak iyidir").
+                Başlık: "<h3>📘 Sosyal Öykü</h3>".
+                Metin: ${text}`;
+            }
+            else if (action === 'behavior_chart') {
+                prompt = `Bu metindeki konuyu veya öğrencinin ihtiyaçlarını analiz et ve 'Davranış Takip Çizelgesi' oluştur.
+                Haftalık bir tablo (Pazartesi-Cuma) olsun.
+                Hedef davranışları maddeler halinde sol sütuna yaz.
+                Çıktısı alınıp tik atılabilecek boş HTML kutucukları (veya &nbsp;) koy.
+                Başlık: "<h3>📊 Davranış Takip Çizelgesi</h3>".
+                Metin: ${text}`;
+            }
+            else if (action === 'visual_text') {
+                prompt = `${persona}
+                Bu metni zihinsel yetersizliği olan veya okuma güçlüğü çeken bir birey için 'Kolay Okunur' (Easy Read) formatına çevir.
+                Cümleleri kısalt ve basitleştir.
+                HER cümlenin sonuna veya anahtar kelimelerin yanına, anlamı destekleyen emojiler ekle (Sembol desteği).
+                Madde madde git.
+                Başlık: "<h3>👁️ Görselleştirilmiş Metin (Easy Read)</h3>".
+                Metin: ${text}`;
+            }
+            // ------------------------------------
             else if (action === 'summarize_long') {
                 prompt = `${persona}
                 Bu notları "Detaylı ve Kapsamlı" bir şekilde özetle.
@@ -572,7 +618,6 @@
                 Başlık: "<h3>📑 Detaylı Özet (Uzun)</h3>".
                 Metin: ${text}`;
             }
-            // ------------------------------------
             else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
             else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
             else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
@@ -602,7 +647,7 @@
                     const titleEl = document.getElementById('note-title');
                     titleEl.value = cleanResult.trim() + " " + titleEl.value;
                     showToast("Ruh hali eklendi!", "success");
-                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map', 'pedagogical_organizer', 'socratic_questions', 'iep_goals', 'adapt_activity', 'parent_message', 'generate_rubric', 'generate_hashtags', 'generate_analogy', 'email_formal', 'generate_references', 'bio_site', 'summarize_long'].includes(action)) {
+                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map', 'pedagogical_organizer', 'socratic_questions', 'iep_goals', 'adapt_activity', 'parent_message', 'generate_rubric', 'generate_hashtags', 'generate_analogy', 'email_formal', 'generate_references', 'bio_site', 'bio_short', 'bio_services', 'bio_slogan', 'summarize_long', 'social_story', 'behavior_chart', 'visual_text'].includes(action)) {
                     contentDiv.innerHTML += "<br><br>" + cleanResult;
                     contentDiv.scrollTop = contentDiv.scrollHeight;
                 } else {
@@ -909,16 +954,24 @@
                             <button onclick="toggleVoice()" id="mic-btn" class="p-3 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors shadow-sm"><i data-lucide="mic" class="w-5 h-5"></i></button>
                             <div class="relative">
                                 <button onclick="toggleAiMenu()" class="p-3 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors shadow-sm ring-2 ring-indigo-100 ring-offset-1"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
-                                <div id="ai-popup" class="absolute bottom-16 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 hidden z-30 transform origin-bottom-right transition-all">
-                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Web & SEO</div>
-                                    <button onclick="runAI('blogify_short')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700 font-bold bg-indigo-50"><i data-lucide="newspaper" class="w-4 h-4"></i> Mikro-Blog (Site İçin)</button>
-                                    <button onclick="runAI('bio_site')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700 font-bold bg-indigo-50"><i data-lucide="user-circle" class="w-4 h-4"></i> Bio Site (Profil Yazısı)</button>
+                                <div id="ai-popup" class="absolute bottom-16 right-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 hidden z-30 transform origin-bottom-right transition-all max-h-[60vh] overflow-y-auto">
+                                   
+                                    <!-- YENİ BÖLÜM: Kişisel Marka & Bio Site -->
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Kişisel Marka & Bio Site</div>
+                                    <button onclick="runAI('bio_site')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700 font-bold bg-indigo-50"><i data-lucide="user-circle" class="w-4 h-4"></i> Bio Site Yazısı (Profil)</button>
+                                    <button onclick="runAI('bio_short')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="twitter" class="w-4 h-4"></i> Kısa Bio (Insta/Twit)</button>
+                                    <button onclick="runAI('bio_services')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="briefcase" class="w-4 h-4"></i> Hizmet Listesi (Neler Yaparım?)</button>
+                                    <button onclick="runAI('bio_slogan')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="megaphone" class="w-4 h-4"></i> Kişisel Slogan (Motto)</button>
+                                   
+                                    <div class="h-px bg-gray-100 my-1"></div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Web & İçerik</div>
+                                    <button onclick="runAI('blogify_short')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="newspaper" class="w-4 h-4"></i> Mikro-Blog (Site İçin)</button>
                                     <button onclick="runAI('seo_analysis')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="search-check" class="w-4 h-4"></i> SEO Analizi</button>
                                     <button onclick="runAI('image_prompts')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700"><i data-lucide="image-plus" class="w-4 h-4"></i> Görsel Fikirleri</button>
                                     <button onclick="runAI('generate_hashtags')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="hash" class="w-4 h-4"></i> Hashtag Üret (#)</button>
                                    
                                     <div class="h-px bg-gray-100 my-1"></div>
-                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Eğitim & Analiz</div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Eğitim & Analiz</div>
                                     <button onclick="runAI('analyze_mood')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="smile" class="w-4 h-4"></i> Duygu Durumu (Mood)</button>
                                     <button onclick="runAI('mind_map')" class="w-full text-left px-3 py-2 hover:bg-cyan-50 rounded-lg text-sm flex items-center gap-2 text-cyan-700"><i data-lucide="network" class="w-4 h-4"></i> Kavram Haritası</button>
                                     <button onclick="runAI('extract_tasks')" class="w-full text-left px-3 py-2 hover:bg-yellow-50 rounded-lg text-sm flex items-center gap-2 text-yellow-700"><i data-lucide="list-todo" class="w-4 h-4"></i> Görevleri Çıkar</button>
@@ -927,18 +980,21 @@
                                     <button onclick="runAI('generate_analogy')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="lightbulb" class="w-4 h-4"></i> Analoji (Benzetme)</button>
                                    
                                     <div class="h-px bg-gray-100 my-1"></div>
-                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Özel Eğitim & K-12</div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Özel Eğitim & K-12</div>
+                                    <button onclick="runAI('social_story')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700 font-bold"><i data-lucide="book-heart" class="w-4 h-4"></i> Sosyal Öykü Yaz</button>
+                                    <button onclick="runAI('behavior_chart')" class="w-full text-left px-3 py-2 hover:bg-red-50 rounded-lg text-sm flex items-center gap-2 text-red-700 font-bold"><i data-lucide="bar-chart-2" class="w-4 h-4"></i> Davranış Çizelgesi</button>
+                                    <button onclick="runAI('visual_text')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700 font-bold"><i data-lucide="eye" class="w-4 h-4"></i> Görselleştir & Basitleştir</button>
                                     <button onclick="runAI('iep_goals')" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700"><i data-lucide="target" class="w-4 h-4"></i> BEP Hedefi Yaz</button>
                                     <button onclick="runAI('adapt_activity')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="puzzle" class="w-4 h-4"></i> Etkinlik Uyarla (İnklüzyon)</button>
                                     <button onclick="runAI('parent_message')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="mail" class="w-4 h-4"></i> Veli Mesajı</button>
                                    
                                     <div class="h-px bg-gray-100 my-1"></div>
-                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Pedagojik Analiz</div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Pedagojik Analiz</div>
                                     <button onclick="runAI('pedagogical_organizer')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="layout-template" class="w-4 h-4"></i> Pedagojik Örgütleyici Seç</button>
                                     <button onclick="runAI('socratic_questions')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="message-circle-question" class="w-4 h-4"></i> Sokratik Sorular</button>
                                    
                                     <div class="h-px bg-gray-100 my-1"></div>
-                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
+                                    <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider sticky top-0 bg-white z-10">Araçlar</div>
                                     <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
                                     <button onclick="runAI('summarize_short')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="scissors" class="w-4 h-4 text-rose-500"></i> Kısa Özet (Benim Dilim)</button>
                                     <button onclick="runAI('summarize_long')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="file-text" class="w-4 h-4 text-rose-600"></i> Detaylı Özet (Uzun)</button>
