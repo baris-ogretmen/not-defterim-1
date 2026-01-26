@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v41'; // V41 - iPhone Link Hatası Kesin Çözüm
+        const CURRENT_KEY = 'baris_final_notes_v43'; // V43 - iPhone Linkleri KESİN Düzeltildi
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -33,7 +33,8 @@
             'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
             'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34',
             'baris_final_notes_v35', 'baris_final_notes_v36', 'baris_final_notes_v37',
-            'baris_final_notes_v38', 'baris_final_notes_v39', 'baris_final_notes_v40'
+            'baris_final_notes_v38', 'baris_final_notes_v39', 'baris_final_notes_v40',
+            'baris_final_notes_v41', 'baris_final_notes_v42'
         ];
         
         let notes = [];
@@ -75,7 +76,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v40') || localStorage.getItem('baris_final_notes_v39');
+                 const prevData = localStorage.getItem('baris_final_notes_v42') || localStorage.getItem('baris_final_notes_v41');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -410,7 +411,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V41 FİNAL - IPHONE LINK FIX) ---
+        // --- YOUTUBE ASİSTANI (V43 FİNAL - IPHONE LINK FIX) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
