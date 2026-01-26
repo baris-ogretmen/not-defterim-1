@@ -13,21 +13,12 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v35'; // V35 - Link Fix Final
+        const CURRENT_KEY = 'baris_final_notes_v36'; // V36 - Tags & Links Fixed
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
-        // Tüm eski versiyon anahtarları (Kurtarma için)
+        // Eski versiyon anahtarları
         const LEGACY_KEYS = [
-            'baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v4', 
-            'baris_final_notes_v5', 'baris_final_notes_v6', 'baris_final_notes_v7', 
-            'baris_final_notes_v8', 'baris_final_notes_v9', 'baris_final_notes_v10', 
-            'baris_final_notes_v11', 'baris_final_notes_v12', 'baris_final_notes_v13', 
-            'baris_final_notes_v14', 'baris_final_notes_v15', 'baris_final_notes_v16', 
-            'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
-            'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
-            'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
+            'baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v30', 
             'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34'
         ];
         
@@ -69,9 +60,8 @@
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
-            // Eğer evrensel boşsa ve önceki sürüm varsa oradan al
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v30') || localStorage.getItem('baris_final_notes_v34');
+                 const prevData = localStorage.getItem('baris_final_notes_v34') || localStorage.getItem('baris_final_notes_v30');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -406,7 +396,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V32 - HTML LINK FIX) ---
+        // --- YOUTUBE ASİSTANI (V36 - FIXED) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -416,6 +406,7 @@
         
         async function processYouTubeTranscript() {
             const transcript = document.getElementById('yt-transcript').value;
+            // Basit doğrulama: Link değil yazı olmalı
             if(transcript.includes("http://") || transcript.includes("https://") || transcript.includes("youtube.com")) {
                 alert("⚠️ Hata: Buraya YouTube Linki değil, kopyaladığın YAZILARI yapıştırmalısın.");
                 return;
@@ -550,64 +541,7 @@
                  ${multiColorHighlight}
                  Metin: ${text}`;
             }
-            else if (action === 'generate_rubric') {
-                prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla.
-                HTML Tablosu (<table>) formatında ver.
-                Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'generate_hashtags') {
-                prompt = `Bu metin için sosyal medyada (Instagram, Twitter, LinkedIn) etkileşimi artıracak, konuyla ilgili en popüler 15 adet Türkçe Hashtag (#) öner.
-                Liste olarak ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_analogy') {
-                prompt = `${persona}
-                Bu metindeki ana konuyu veya en karmaşık kavramı, günlük hayattan herkesin anlayabileceği basit ve akılda kalıcı bir ANALOJİ (benzetme) kullanarak açıkla.
-                (Örn: Trafik, Futbol, Yemek Yapmak vb.).
-                Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'email_formal') {
-                prompt = `Bu notları, bir yöneticiye, resmi kuruma veya veliye gönderilecek resmi, nazik ve profesyonel bir e-posta taslağına dönüştür.
-                Konu satırı ekle.
-                Başlık: "<h3>📧 E-Posta Taslağı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_references') {
-                prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele.
-                Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
-            }
-            else if (action === 'iep_goals') {
-                prompt = `${persona}
-                Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz.
-                Hedefler SMART (Ölçülebilir, Gözlemlenebilir) olsun.
-                HTML formatında ver. Başlık: "<h3>🎯 BEP Hedef Önerileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'adapt_activity') {
-                prompt = `${persona}
-                Bu konuyu/etkinliği "Özel Gereksinimli" veya "Okul Öncesi" bir öğrenci için uyarla (İnklüzyon).
-                Basitleştirme, Görsel Destek, Materyal Uyarlaması ve Yönerge Basitleştirme başlıklarını kullan.
-                HTML formatında ver. Başlık: "<h3>🧩 Etkinlik Uyarlama (İnklüzyon)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'parent_message') {
-                prompt = `${persona}
-                Bu notları baz alarak, öğrencinin velisine gönderilecek nazik, profesyonel ve işbirlikçi bir bilgilendirme mesajı yaz.
-                Gelişimi öv, evde yapılabilecek basit bir öneri ekle.
-                HTML formatında ver. Başlık: "<h3>👨‍👩‍👧 Veli Bilgilendirme Mesajı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'socratic_questions') {
-                prompt = `Bu metindeki konuyu derinleştirmek için öğrencilere sorulabilecek 3 adet "Sokratik Soru" üret. HTML formatında ver. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". Metin: ${text}`;
-            }
-            else if (action === 'summarize_short') {
-                prompt = `${persona}
-                Bu notları benim ağzımdan "Kısa ve Öz" bir şekilde özetle.
-                ${multiColorHighlight}
-                Sanki bir manifesto yazar gibi vurucu ve net olsun.
-                Metin: ${text}`;
-            }
-            else if (action === 'blogify_short') {
-                prompt = `${persona}
-                Web sitem için "Kısa Köşe Yazısı" (Mikro-Blog) oluştur. Max 300 kelime.
-                ${multiColorHighlight}
-                Samimi, akıcı ve emojili olsun. Metin: ${text}`;
-            }
+            // DİĞER AKSİYONLAR (Kısaltıldı)
             else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
             else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
             else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
@@ -615,6 +549,18 @@
             else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
             else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
+            // Eksik kalanlar:
+            else if (action === 'generate_rubric') { prompt = `Rubrik hazırla. HTML tablo. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'generate_hashtags') { prompt = `Hashtag üret. Liste. Metin: ${text}`; }
+            else if (action === 'generate_analogy') { prompt = `${persona} Analoji (benzetme) yap. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'email_formal') { prompt = `Resmi e-posta yaz. Metin: ${text}`; }
+            else if (action === 'generate_references') { prompt = `Kaynakça öner. Metin: ${text}`; }
+            else if (action === 'iep_goals') { prompt = `${persona} BEP hedefi yaz. Metin: ${text}`; }
+            else if (action === 'adapt_activity') { prompt = `${persona} Etkinlik uyarla (İnklüzyon). Metin: ${text}`; }
+            else if (action === 'parent_message') { prompt = `${persona} Veli mesajı yaz. Metin: ${text}`; }
+            else if (action === 'socratic_questions') { prompt = `Sokratik sorular üret. Metin: ${text}`; }
+            else if (action === 'summarize_short') { prompt = `${persona} Kısa özetle. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'blogify_short') { prompt = `${persona} Mikro-blog yaz. ${multiColorHighlight} Metin: ${text}`; }
 
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
@@ -641,14 +587,12 @@
                     const titleEl = document.getElementById('note-title');
                     titleEl.value = cleanResult.trim() + " " + titleEl.value;
                     showToast("Ruh hali eklendi!", "success");
-                } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map', 'pedagogical_organizer', 'socratic_questions', 'iep_goals', 'adapt_activity', 'parent_message', 'generate_rubric', 'generate_hashtags', 'generate_analogy', 'email_formal', 'generate_references'].includes(action)) {
+                } else {
+                    // Diğer tüm durumlar için içeriği ekle
                     contentDiv.innerHTML += "<br><br>" + cleanResult;
                     contentDiv.scrollTop = contentDiv.scrollHeight;
-                } else {
-                    contentDiv.innerHTML = cleanResult; 
+                    showToast("İşlem tamamlandı!", "success");
                 }
-
-                if(action !== 'generate_title' && action !== 'analyze_mood') showToast("İşlem tamamlandı!", "success");
 
             } catch (err) {
                 showToast("AI Hatası: " + err.message, "error");
@@ -733,6 +677,21 @@
             div.innerText = msg;
             document.getElementById('toast-container').appendChild(div);
             setTimeout(() => div.remove(), 3000);
+        }
+        
+        function copyLink(url) {
+            const textArea = document.createElement("textarea");
+            textArea.value = url;
+            textArea.style.position = "fixed"; textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
+            } catch (err) {
+                showToast("Kopyalama başarısız.", "error");
+            }
+            document.body.removeChild(textArea);
         }
     </script>
 
