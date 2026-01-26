@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v29'; // V29 - Link Kesin Çözüm
+        const CURRENT_KEY = 'baris_final_notes_v30'; // V30 - iPhone Link Fix Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -29,7 +29,8 @@
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28'
+            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
+            'baris_final_notes_v29'
         ];
         
         let notes = [];
@@ -71,7 +72,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v28');
+                 const prevData = localStorage.getItem('baris_final_notes_v29');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -202,7 +203,6 @@
             const grid = document.getElementById('notes-grid');
             const empty = document.getElementById('empty-state');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
-
             grid.innerHTML = '';
 
             const filtered = notes.filter(n => {
@@ -407,12 +407,18 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V28 - GÜÇLENDİRİLMİŞ LİNK) ---
+        // --- YOUTUBE ASİSTANI (V29 - KESİN ÇÖZÜM) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
         function closeYouTubeMode() {
             document.getElementById('yt-modal').classList.add('hidden');
+        }
+        
+        // BU FONKSİYON ARTIK GEREKSİZ (HREF İLE ÇÖZÜLDÜ) AMA YEDEK OLARAK KALSIN
+        function openTranscriptSite(service) {
+            let url = service === 1 ? 'https://youtubetranscript.com/' : 'https://downsub.com/';
+            window.open(url, '_blank');
         }
         
         async function processYouTubeTranscript() {
@@ -534,7 +540,7 @@
                 Sloganvari ara başlıklar kullan.
                 Metin: ${text}`;
             }
-            // PEDAGOJİK ÖZELLİKLER
+            // PEDAGOJİK ÖZELLİKLER (V24+V26)
             else if (action === 'pedagogical_organizer') {
                  prompt = `${persona}
                  Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ.
@@ -551,7 +557,7 @@
                  ${multiColorHighlight}
                  Metin: ${text}`;
             }
-            // YENİ: V26 EKLENTİLERİ
+            // YENİ EKLENEN ÖZELLİKLER (V26)
             else if (action === 'generate_rubric') {
                 prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla.
                 HTML Tablosu (<table>) formatında ver.
@@ -893,7 +899,7 @@
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
-                        <!-- LINK DÜZELTİLDİ: SADECE SAF HTML (href içi temizlendi) -->
+                        <!-- LINK DÜZELTİLDİ: SADECE SAF HTML -->
                         <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
                         </a>
@@ -912,7 +918,7 @@
                         </div>
                     </div>
 
-                    <p class="opacity-75 mt-1">1. Yukarıdaki butona tıkla.<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
+                    <p class="opacity-75 mt-1">1. Yukarıdaki butona tıkla (veya linki kopyala).<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
                 </div>
             </div>
 
