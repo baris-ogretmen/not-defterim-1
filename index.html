@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v30'; // V30 - iPhone Link Fix Final
+        const CURRENT_KEY = 'baris_final_notes_v29'; // V29 - Kesin Link Çözümü
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -29,8 +29,7 @@
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29'
+            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28'
         ];
         
         let notes = [];
@@ -72,7 +71,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v29');
+                 const prevData = localStorage.getItem('baris_final_notes_v28');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -134,21 +133,6 @@
                 showToast("Tüm metin kopyalandı!", "success");
             } catch (err) {
                 showToast("Kopyalama hatası.", "error");
-            }
-            document.body.removeChild(textArea);
-        }
-        
-        function copyLink(url) {
-            const textArea = document.createElement("textarea");
-            textArea.value = url;
-            textArea.style.position = "fixed"; textArea.style.left = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus(); textArea.select();
-            try {
-                document.execCommand('copy');
-                showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
-            } catch (err) {
-                showToast("Kopyalama başarısız.", "error");
             }
             document.body.removeChild(textArea);
         }
@@ -407,18 +391,12 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V29 - KESİN ÇÖZÜM) ---
+        // --- YOUTUBE ASİSTANI (V29 - SAF HTML LINK) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
         function closeYouTubeMode() {
             document.getElementById('yt-modal').classList.add('hidden');
-        }
-        
-        // BU FONKSİYON ARTIK GEREKSİZ (HREF İLE ÇÖZÜLDÜ) AMA YEDEK OLARAK KALSIN
-        function openTranscriptSite(service) {
-            let url = service === 1 ? 'https://youtubetranscript.com/' : 'https://downsub.com/';
-            window.open(url, '_blank');
         }
         
         async function processYouTubeTranscript() {
@@ -509,7 +487,7 @@
             let prompt = "";
             const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
             
-            // "KIRMIZI KALEM" & FOSFORLU VURGU
+            // "KIRMIZI KALEM" & FOSFORLU VURGU (Okunabilirlik Odaklı)
             const multiColorHighlight = `
                 Önemli noktaları ve can alıcı kelimeleri şu HTML sınıflarını kullanarak vurgula:
                 <span class='highlight-red'>Kırmızı Vurgu</span> (Çok önemli),
@@ -540,7 +518,7 @@
                 Sloganvari ara başlıklar kullan.
                 Metin: ${text}`;
             }
-            // PEDAGOJİK ÖZELLİKLER (V24+V26)
+            // PEDAGOJİK ÖZELLİKLER
             else if (action === 'pedagogical_organizer') {
                  prompt = `${persona}
                  Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ.
@@ -885,7 +863,7 @@
         </button>
     </div>
 
-    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - LİNK FIX) -->
+    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK) -->
     <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
@@ -897,28 +875,18 @@
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
                 <h4 class="font-bold text-gray-700 text-sm mb-2">🚀 Mobilde Metin Nasıl Alınır?</h4>
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
-                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
+                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur (Linklere Tıkla):</p>
                     <div class="flex gap-2">
-                        <!-- LINK DÜZELTİLDİ: SADECE SAF HTML -->
+                        <!-- SAF HTML LINKLER (Javascriptsiz) -->
                         <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
+                            Sunucu 1 (Git)
                         </a>
                         <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 2
+                             Sunucu 2 (Git)
                         </a>
                     </div>
                     
-                    <!-- KOPYALANABİLİR YEDEK LİNK -->
-                    <div class="mt-2">
-                        <p class="mb-1 text-gray-500">Butonlar çalışmazsa bu linki kopyala:</p>
-                        <div class="flex items-center gap-2">
-                             <input type="text" value="[https://youtubetranscript.com/](https://youtubetranscript.com/)" class="flex-1 text-[10px] text-gray-600 bg-gray-100 border rounded p-1 select-all" readonly>
-                             <!-- Basit kopyalama butonu -->
-                             <button onclick="copyLink('[https://youtubetranscript.com/](https://youtubetranscript.com/)')" class="p-1 bg-gray-200 rounded hover:bg-gray-300"><i data-lucide="copy" class="w-3 h-3"></i></button>
-                        </div>
-                    </div>
-
-                    <p class="opacity-75 mt-1">1. Yukarıdaki butona tıkla (veya linki kopyala).<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
+                    <p class="opacity-75 mt-1">1. Yukarıdaki butona tıkla.<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
                 </div>
             </div>
 
