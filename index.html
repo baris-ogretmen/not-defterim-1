@@ -4,39 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Barış'ın Akıllı Not Defteri</title>
-    
+   
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+   
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Kalam:wght@300;400;700&family=Merriweather:wght@300;400;700&family=Courier+Prime:wght@400;700&family=Patrick+Hand&display=swap" rel="stylesheet">
-    
+   
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v44'; // V44 - iPhone Link Sorunu %100 Çözüldü
+        const CURRENT_KEY = 'baris_final_notes_v26'; // V26 - Rubrik, Hashtag, Analoji Eklendi
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
-        
+       
         // Tüm eski versiyon anahtarları (Kurtarma için)
         const LEGACY_KEYS = [
-            'baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v4', 
-            'baris_final_notes_v5', 'baris_final_notes_v6', 'baris_final_notes_v7', 
-            'baris_final_notes_v8', 'baris_final_notes_v9', 'baris_final_notes_v10', 
-            'baris_final_notes_v11', 'baris_final_notes_v12', 'baris_final_notes_v13', 
-            'baris_final_notes_v14', 'baris_final_notes_v15', 'baris_final_notes_v16', 
+            'baris_final_notes_v2', 'baris_final_notes_v3', 'baris_final_notes_v4',
+            'baris_final_notes_v5', 'baris_final_notes_v6', 'baris_final_notes_v7',
+            'baris_final_notes_v8', 'baris_final_notes_v9', 'baris_final_notes_v10',
+            'baris_final_notes_v11', 'baris_final_notes_v12', 'baris_final_notes_v13',
+            'baris_final_notes_v14', 'baris_final_notes_v15', 'baris_final_notes_v16',
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
-            'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22', 
-            'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
-            'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
-            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34',
-            'baris_final_notes_v35', 'baris_final_notes_v36', 'baris_final_notes_v37',
-            'baris_final_notes_v38', 'baris_final_notes_v39', 'baris_final_notes_v40',
-            'baris_final_notes_v41', 'baris_final_notes_v42', 'baris_final_notes_v43'
+            'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22',
+            'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25'
         ];
-        
+       
         let notes = [];
         let currentFilter = 'all';
         let currentNoteId = null;
@@ -46,20 +39,18 @@
         let currentFont = 'font-hand';
         let currentCat = 'guncel';
         let isZenMode = false;
-
-        const CATEGORIES = { 
-            'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi', 
-            'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş', 
-            'kisisel': 'Kişisel', 'diger': 'Diğer' 
+        const CATEGORIES = {
+            'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi',
+            'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş',
+            'kisisel': 'Kişisel', 'diger': 'Diğer'
         };
-
         // --- BAŞLATMA ---
         document.addEventListener('DOMContentLoaded', () => {
-            performUltimateMigration(); 
+            performUltimateMigration();
             loadNotes();
             setupVoice();
             if (window.lucide) lucide.createIcons();
-            
+           
             const editor = document.getElementById('note-content');
             editor.addEventListener('mouseup', checkSelection);
             editor.addEventListener('keyup', (e) => {
@@ -67,22 +58,19 @@
                 handleSlashCommands(e);
             });
             editor.addEventListener('touchend', () => setTimeout(checkSelection, 100));
-            
+           
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('gemini-key').value = key;
         });
-
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v43') || localStorage.getItem('baris_final_notes_v42');
+                 const prevData = localStorage.getItem('baris_final_notes_v25');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
-
             const existingIds = new Set(allNotes.map(n => n.id));
             let foundCount = 0;
-
             LEGACY_KEYS.forEach(key => {
                 const oldData = localStorage.getItem(key);
                 if (oldData) {
@@ -100,13 +88,11 @@
                     } catch (e) { console.error("Veri hatası:", key); }
                 }
             });
-
             if (foundCount > 0 || allNotes.length > 0) {
                 localStorage.setItem(UNIVERSAL_KEY, JSON.stringify(allNotes));
                 localStorage.setItem(CURRENT_KEY, JSON.stringify(allNotes));
             }
         }
-
         // --- TEMEL FONKSİYONLAR ---
         function loadNotes() {
             let raw = localStorage.getItem(UNIVERSAL_KEY);
@@ -114,25 +100,22 @@
             if (raw) { try { notes = JSON.parse(raw); } catch (e) { notes = []; } } else { notes = []; }
             renderNotes();
         }
-
         function saveToDisk() {
             const data = JSON.stringify(notes);
             localStorage.setItem(UNIVERSAL_KEY, data);
             localStorage.setItem(CURRENT_KEY, data);
             renderNotes();
         }
-
         // --- KOPYALAMA ---
         function copyNoteContent() {
             const content = document.getElementById('note-content').innerText;
             if (!content) return showToast("Kopyalanacak metin yok.", "error");
-
             const textArea = document.createElement("textarea");
             textArea.value = content;
             textArea.style.position = "fixed"; textArea.style.left = "-9999px";
             document.body.appendChild(textArea);
             textArea.focus(); textArea.select();
-            
+           
             try {
                 document.execCommand('copy');
                 showToast("Tüm metin kopyalandı!", "success");
@@ -141,31 +124,13 @@
             }
             document.body.removeChild(textArea);
         }
-        
-        function copyLink(url) {
-            const textArea = document.createElement("textarea");
-            textArea.value = url;
-            textArea.style.position = "fixed"; textArea.style.left = "-9999px";
-            document.body.appendChild(textArea);
-            textArea.focus(); textArea.select();
-            try {
-                document.execCommand('copy');
-                showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
-            } catch (err) {
-                showToast("Kopyalama başarısız.", "error");
-            }
-            document.body.removeChild(textArea);
-        }
-
         // --- CRUD ---
         function saveCurrentNote() {
             const title = document.getElementById('note-title').value.trim();
             const contentHTML = document.getElementById('note-content').innerHTML;
             const contentText = document.getElementById('note-content').innerText.trim();
-
             if (!title && !contentText) { showToast("Boş not kaydedilemez!", "error"); return; }
             const timestamp = Date.now();
-
             if (currentNoteId) {
                 const index = notes.findIndex(n => n.id === currentNoteId);
                 if (index > -1) {
@@ -182,12 +147,10 @@
             saveToDisk();
             showToast("Not kaydedildi.", "success");
         }
-
         function initiateDelete(id) {
             noteToDeleteId = id;
             document.getElementById('confirm-modal').classList.remove('hidden');
         }
-
         function confirmDeleteAction() {
             if (!noteToDeleteId) return;
             notes = notes.filter(n => n.id !== noteToDeleteId);
@@ -196,36 +159,29 @@
             closeConfirmModal();
             showToast("Not silindi.", "success");
         }
-
         function closeConfirmModal() {
             document.getElementById('confirm-modal').classList.add('hidden');
             noteToDeleteId = null;
         }
-
         // --- RENDER ---
         function renderNotes() {
             const grid = document.getElementById('notes-grid');
             const empty = document.getElementById('empty-state');
             const searchVal = document.getElementById('searchInput').value.toLowerCase();
             grid.innerHTML = '';
-
             const filtered = notes.filter(n => {
                 const inCat = currentFilter === 'all' || n.category === currentFilter;
                 const inSearch = (n.title + n.content).toLowerCase().includes(searchVal);
                 return inCat && inSearch;
             }).sort((a, b) => b.updatedAt - a.updatedAt);
-
             if (filtered.length === 0) empty.classList.remove('hidden'); else empty.classList.add('hidden');
-
             filtered.forEach(note => {
                 const date = new Date(note.updatedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
                 const catClass = `cat-${note.category || 'diger'}`;
                 const fontClass = note.font || 'font-hand';
-
                 const card = document.createElement('div');
                 card.className = `note-card ${catClass} flex flex-col h-60 bg-white group animate-fade-in relative`;
                 card.onclick = (e) => { if (window.getSelection().toString().length > 0) return; openNote(note.id); };
-
                 card.innerHTML = `
                     <div class="p-5 flex-1 flex flex-col h-full relative">
                         <div class="flex justify-between items-start mb-2 pr-8 relative z-20">
@@ -248,7 +204,6 @@
             });
             if (window.lucide) lucide.createIcons();
         }
-
         // --- UI ---
         function filter(cat) {
             currentFilter = cat;
@@ -263,7 +218,6 @@
             }
             renderNotes();
         }
-
         function openNote(id) {
             const note = notes.find(n => n.id === id);
             if (!note) return;
@@ -276,7 +230,6 @@
             setFont(note.font || 'font-hand');
             showModal();
         }
-
         function openNewNote() {
             currentNoteId = null;
             document.getElementById('note-title').value = '';
@@ -286,12 +239,10 @@
             setFont('font-hand');
             showModal();
         }
-
         function showModal() {
             document.getElementById('note-modal').classList.remove('hidden');
             setTimeout(() => document.getElementById('modal-panel').classList.remove('translate-y-full'), 10);
         }
-
         function closeModal() {
             document.getElementById('modal-panel').classList.add('translate-y-full');
             document.getElementById('floating-menu').classList.add('hidden');
@@ -303,7 +254,6 @@
                 if(isListening) toggleVoice();
             }, 300);
         }
-
         function setCategory(catKey) {
             currentCat = catKey;
             const container = document.getElementById('modal-cats');
@@ -316,19 +266,15 @@
                 container.appendChild(btn);
             });
         }
-
         function setFont(fontClass) {
             currentFont = fontClass;
             const editor = document.getElementById('note-content');
             editor.className = `w-full h-full min-h-[50vh] p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
         }
-
         function applyColor(color) {
             document.execCommand('foreColor', false, color);
         }
-
         function updateStats() { /* Kaldırıldı */ }
-
         // --- GÖRSEL & KULLANIŞLILIK ---
         function checkSelection() {
             const selection = window.getSelection();
@@ -336,12 +282,11 @@
             if (selection.toString().trim().length > 0) {
                 const range = selection.getRangeAt(0);
                 const rect = range.getBoundingClientRect();
-                floatingMenu.style.top = `${rect.top - 50}px`; 
+                floatingMenu.style.top = `${rect.top - 50}px`;
                 floatingMenu.style.left = `${rect.left + (rect.width / 2) - 60}px`;
                 floatingMenu.classList.remove('hidden');
             } else { floatingMenu.classList.add('hidden'); }
         }
-
         async function magicFixSelection() {
             const selection = window.getSelection();
             const text = selection.toString();
@@ -350,9 +295,8 @@
             floatingMenu.innerHTML = '<span class="animate-pulse text-xs">Sihir yapılıyor...</span>';
             const apiKey = localStorage.getItem('gemini_api_key');
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
-
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: `Bu metni düzelt: ${text}` }] }] })
                 });
                 const data = await res.json();
@@ -361,14 +305,13 @@
                     document.execCommand('insertText', false, fixedText);
                     showToast("Sihirli değnek dokundu!", "success");
                 }
-            } catch (e) { showToast("Sihir hatası!", "error"); } 
+            } catch (e) { showToast("Sihir hatası!", "error"); }
             finally {
                 floatingMenu.innerHTML = `<button onclick="magicFixSelection()" class="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-transform hover:scale-105"><i data-lucide="wand-2" class="w-3 h-3"></i><span class="text-xs font-bold">Düzelt</span></button>`;
                 if (window.lucide) lucide.createIcons();
                 floatingMenu.classList.add('hidden');
             }
         }
-
         function toggleZenMode() {
             isZenMode = !isZenMode;
             const modal = document.getElementById('modal-panel');
@@ -381,7 +324,6 @@
                 showToast("Zen Modu", "success");
             } else { exitZenMode(); }
         }
-
         function exitZenMode() {
             isZenMode = false;
             const modal = document.getElementById('modal-panel');
@@ -391,14 +333,13 @@
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('#note-modal .border-b').classList.remove('border-transparent');
         }
-
         function handleSlashCommands(e) {
             const editor = document.getElementById('note-content');
             const selection = window.getSelection();
             if(!selection.rangeCount) return;
             const range = selection.getRangeAt(0);
             const text = range.startContainer.textContent;
-            
+           
             if (text.endsWith('/tarih')) {
                 document.execCommand('delete', false, null);
                 document.execCommand('insertText', false, new Date().toLocaleDateString('tr-TR'));
@@ -410,32 +351,37 @@
                 document.execCommand('insertHTML', false, '☐ ');
             }
         }
-
-        // --- YOUTUBE ASİSTANI (V44 FİNAL - IPHONE LINK FIX) ---
+        // --- YOUTUBE ASİSTANI (V26) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
         function closeYouTubeMode() {
             document.getElementById('yt-modal').classList.add('hidden');
         }
-        
+       
+        function openTranscriptSite(service) {
+            let url = '';
+            // SAF HTML LINKLER
+            if (service === 1) url = 'https://youtubetranscript.com/';
+            else if (service === 2) url = 'https://downsub.com/';
+            window.open(url, '_blank');
+        }
+       
         async function processYouTubeTranscript() {
             const transcript = document.getElementById('yt-transcript').value;
             if(transcript.includes("http://") || transcript.includes("https://") || transcript.includes("youtube.com")) {
                 alert("⚠️ Hata: Buraya YouTube Linki değil, kopyaladığın YAZILARI yapıştırmalısın.");
                 return;
             }
-
             if(!transcript.trim()) return showToast("Lütfen transkript yapıştırın!", "error");
-            
+           
             closeYouTubeMode();
             openNewNote();
-            
+           
             document.getElementById('note-content').innerText = "Videonun içeriği analiz ediliyor...\n(Bu işlem metnin uzunluğuna göre 10-15 saniye sürebilir)\n\n" + transcript.substring(0, 100) + "...";
-            
+           
             runAI('youtube_summary', transcript);
         }
-
         // --- YEDEKLEME ---
         function exportBackup() {
             if (notes.length === 0) return showToast("Yedeklenecek not yok.", "error");
@@ -450,9 +396,7 @@
             document.body.removeChild(a);
             showToast("Yedek indirildi.", "success");
         }
-
         function triggerImport() { document.getElementById('import-file').click(); }
-
         function importBackup(input) {
             const file = input.files[0];
             if (!file) return;
@@ -474,11 +418,10 @@
             };
             reader.readAsText(file);
         }
-
         // --- AI ---
         function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-        
+       
         function saveAiKey() {
             const key = document.getElementById('gemini-key').value.trim();
             if(key) {
@@ -489,25 +432,21 @@
                 showToast("Lütfen anahtar girin.", "error");
             }
         }
-
         async function runAI(action, customText = null) {
             if(action !== 'generate_title' && action !== 'youtube_summary') toggleAiMenu();
-            
+           
             const contentDiv = document.getElementById('note-content');
             const text = customText || contentDiv.innerText;
-
             if(action !== 'generate_title' && !text.trim()) return showToast("Önce bir şeyler yazın!", "error");
-            
+           
             const apiKey = localStorage.getItem('gemini_api_key') ? localStorage.getItem('gemini_api_key').trim() : null;
             if(!apiKey) { toggleSettings(); return showToast("Lütfen önce API anahtarı girin.", "error"); }
-
             document.getElementById('ai-loading').classList.remove('hidden');
             document.getElementById('ai-loading').classList.add('flex');
-
             let prompt = "";
             const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
-            
-            // "KIRMIZI KALEM" & FOSFORLU VURGU
+           
+            // "KIRMIZI KALEM" & FOSFORLU VURGU (Okunabilirlik Odaklı - GÜÇLENDİRİLMİŞ)
             const multiColorHighlight = `
                 Önemli noktaları ve can alıcı kelimeleri şu HTML sınıflarını kullanarak vurgula:
                 <span class='highlight-red'>Kırmızı Vurgu</span> (Çok önemli),
@@ -516,14 +455,13 @@
                 <span class='highlight-marker'>Fosforlu Arka Plan</span> (Dikkat çekici kısımlar).
                 Metin görsel olarak zengin, okunabilir, pedagojik ve profesyonel dursun. Başlıklar net olsun.
             `;
-            
+           
             const persona = `
                 Sen Barış'ın kendisisin. Bir Özel Eğitim ve K-12 Öğretmenisin (Kolej ve Rehabilitasyon Merkezi).
                 Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
                 ASLA kendini tanıtma. "Ben Barış hoca..." deme. Doğrudan konuya gir.
                 "Merhaba arkadaşlar", "Bakın burası çok önemli", "Şunu unutmayın" gibi doğal, samimi bir konuşma dili kullan.
             `;
-
             if (action === 'generate_title') {
                 prompt = `Bu metni analiz et ve Barış'ın üslubuna uygun, çarpıcı, kısa (maksimum 5 kelime) bir başlık yaz. Sadece başlığı ver. Metin: ${text}`;
             }
@@ -537,23 +475,6 @@
                 ${multiColorHighlight}
                 Sloganvari ara başlıklar kullan.
                 Metin: ${text}`;
-            }
-            // PEDAGOJİK ÖZELLİKLER
-            else if (action === 'pedagogical_organizer') {
-                 prompt = `${persona}
-                 Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ.
-                 (Seçenekler: Balık Kılçığı, Venn Şeması, Tarih Şeridi, Akış Şeması, Kavram Haritası, T-Çizelgesi, 5N1K Tablosu).
-                 
-                 Çıktı Formatı (HTML):
-                 <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm mb-4">
-                    <h3 class="text-blue-900 font-bold text-lg mb-2 flex items-center gap-2">🎯 Seçilen Yöntem: [Yöntem Adı]</h3>
-                    <p class="text-sm text-blue-700 italic mb-4">"Neden bu yöntemi seçtim? Çünkü [Kısa Gerekçe]"</p>
-                    <div class="space-y-3 bg-white p-4 rounded-lg border border-gray-100 text-gray-800">
-                        [İçeriği seçilen yönteme göre HTML Tablosu (<table>) veya düzenli Listeler (<ul>/<li>) ile sun]
-                    </div>
-                 </div>
-                 ${multiColorHighlight}
-                 Metin: ${text}`;
             }
             // YENİ EKLENEN ÖZELLİKLER (V26)
             else if (action === 'generate_rubric') {
@@ -580,7 +501,23 @@
                 prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele.
                 Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
             }
-            // DİĞER MODÜLLER
+            // MEVCUT PEDAGOJİK ÖZELLİKLER
+            else if (action === 'pedagogical_organizer') {
+                 prompt = `${persona}
+                 Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ.
+                 (Seçenekler: Balık Kılçığı, Venn Şeması, Tarih Şeridi, Akış Şeması, Kavram Haritası, T-Çizelgesi, 5N1K Tablosu).
+                
+                 Çıktı Formatı (HTML):
+                 <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm mb-4">
+                    <h3 class="text-blue-900 font-bold text-lg mb-2 flex items-center gap-2">🎯 Seçilen Yöntem: [Yöntem Adı]</h3>
+                    <p class="text-sm text-blue-700 italic mb-4">"Neden bu yöntemi seçtim? Çünkü [Kısa Gerekçe]"</p>
+                    <div class="space-y-3 bg-white p-4 rounded-lg border border-gray-100 text-gray-800">
+                        [İçeriği seçilen yönteme göre HTML Tablosu (<table>) veya düzenli Listeler (<ul>/<li>) ile sun]
+                    </div>
+                 </div>
+                 ${multiColorHighlight}
+                 Metin: ${text}`;
+            }
             else if (action === 'iep_goals') {
                 prompt = `${persona}
                 Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz.
@@ -622,20 +559,16 @@
             else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
             else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
-
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
                 if(data.error) throw new Error(data.error.message);
                 let result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
                 if(!result) throw new Error("Boş yanıt.");
-
                 // HTML Kodu Temizleme (Regex)
                 let cleanResult = result.replace(/^```html\s*/i, '').replace(/```$/, '').trim();
-
                 if (action === 'whatsapp') {
                     const parts = cleanResult.split('|||');
                     document.getElementById('wp-text').innerHTML = parts[0].trim();
@@ -652,11 +585,9 @@
                     contentDiv.innerHTML += "<br><br>" + cleanResult;
                     contentDiv.scrollTop = contentDiv.scrollHeight;
                 } else {
-                    contentDiv.innerHTML = cleanResult; 
+                    contentDiv.innerHTML = cleanResult;
                 }
-
                 if(action !== 'generate_title' && action !== 'analyze_mood') showToast("İşlem tamamlandı!", "success");
-
             } catch (err) {
                 showToast("AI Hatası: " + err.message, "error");
             } finally {
@@ -664,10 +595,9 @@
                 document.getElementById('ai-loading').classList.remove('flex');
             }
         }
-
         // --- WhatsApp ---
         function openWhatsAppMode() {
-            const content = document.getElementById('note-content').innerHTML; 
+            const content = document.getElementById('note-content').innerHTML;
             document.getElementById('wp-text').innerHTML = content;
             document.getElementById('wp-modal').classList.remove('hidden');
         }
@@ -677,7 +607,7 @@
             document.getElementById('wp-preview').style.backgroundColor = colors[parseInt(idx)-1] || colors[0];
         }
         function setWpColor(c) { document.getElementById('wp-preview').style.backgroundColor = c; }
-        
+       
         function saveWpToNote() {
             const htmlContent = document.getElementById('wp-text').innerHTML;
             currentNoteId = null;
@@ -688,7 +618,6 @@
             saveCurrentNote();
             closeWp();
         }
-
         // --- Ses ---
         function setupVoice() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -697,7 +626,7 @@
                 recognition.lang = 'tr-TR';
                 recognition.continuous = true;
                 recognition.interimResults = true;
-                
+               
                 recognition.onresult = (e) => {
                     let final = '';
                     for (let i = e.resultIndex; i < e.results.length; ++i) if(e.results[i].isFinal) final += e.results[i][0].transcript;
@@ -714,26 +643,24 @@
             if(!recognition) return showToast("Mikrofon desteklenmiyor", "error");
             isListening = !isListening;
             updateMicState(isListening);
-            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} } 
+            if(isListening) { try{ recognition.start(); showToast("Dinliyorum...", "success"); }catch{} }
             else { try{ recognition.stop(); }catch{} }
         }
         function updateMicState(on) {
             const btn = document.getElementById('mic-btn');
-            if(on) { 
-                btn.classList.add('animate-pulse', 'bg-red-500', 'text-white'); 
+            if(on) {
+                btn.classList.add('animate-pulse', 'bg-red-500', 'text-white');
                 btn.innerHTML = '<i data-lucide="mic-off"></i>';
-            } else { 
-                btn.classList.remove('animate-pulse', 'bg-red-500', 'text-white'); 
+            } else {
+                btn.classList.remove('animate-pulse', 'bg-red-500', 'text-white');
                 btn.innerHTML = '<i data-lucide="mic"></i>';
             }
             if (window.lucide) lucide.createIcons();
         }
-
         function toggleStealth() {
             document.body.classList.toggle('stealth-mode');
             if(document.body.classList.contains('stealth-mode')) { if(!isListening) toggleVoice(); }
         }
-
         function showToast(msg, type) {
             const div = document.createElement('div');
             div.className = `px-4 py-2 rounded-lg shadow-lg text-white text-sm font-bold animate-fade-in ${type === 'error' ? 'bg-red-500' : 'bg-gray-800'}`;
@@ -741,9 +668,7 @@
             document.getElementById('toast-container').appendChild(div);
             setTimeout(() => div.remove(), 3000);
         }
-        
     </script>
-
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -751,13 +676,11 @@
             background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
             background-size: 32px 32px;
         }
-
         /* Fontlar */
         .font-hand { font-family: 'Kalam', cursive; }
         .font-serif { font-family: 'Merriweather', serif; }
         .font-mono { font-family: 'Courier Prime', monospace; }
         .font-sans { font-family: 'Inter', sans-serif; }
-
         /* Kart */
         .note-card {
             transition: transform 0.2s, box-shadow 0.2s;
@@ -771,11 +694,9 @@
             box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
             z-index: 10;
         }
-
         /* Scrollbar */
         .card-scroll::-webkit-scrollbar { width: 4px; }
         .card-scroll::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.1); border-radius: 4px; }
-
         /* Kategori Renkleri */
         .cat-tarih { background: #fee2e2; border-top: 5px solid #ef4444; }
         .cat-dini { background: #dcfce7; border-top: 5px solid #22c55e; }
@@ -785,7 +706,6 @@
         .cat-kisisel { background: #fae8ff; border-top: 5px solid #d946ef; }
         .cat-is { background: #f1f5f9; border-top: 5px solid #64748b; }
         .cat-diger { background: #ffffff; border-top: 5px solid #9ca3af; }
-
         /* FAB */
         .fab {
             position: fixed; bottom: 24px; right: 24px; width: 64px; height: 64px;
@@ -795,30 +715,26 @@
             transition: transform 0.2s; z-index: 40;
         }
         .fab:active { transform: scale(0.90); }
-
         /* Placeholder */
         [contenteditable]:empty:before { content: attr(placeholder); color: #9ca3af; display: block; }
-        
+       
         /* KIRMIZI KALEM STİLİ VURGULAR (Okunabilirlik) */
         .highlight-red { color: #dc2626; font-weight: 800; }
         .highlight-blue { color: #2563eb; font-weight: 800; }
         .highlight-black { color: #000000; font-weight: 900; text-decoration: underline; }
         .highlight-marker { background-color: #fef08a; padding: 0 2px; }
-
         /* Stealth Mode */
         body.stealth-mode { background: #000 !important; overflow: hidden; }
         body.stealth-mode header, body.stealth-mode main, body.stealth-mode .fab { opacity: 0; pointer-events: none; }
         body.stealth-mode #stealth-overlay { display: flex; }
-        
+       
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-
         /* Floating Menu */
         #floating-menu { position: fixed; z-index: 100; transform: translate(-50%, -100%); }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800">
-
     <!-- Header -->
     <header class="bg-white/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-100">
         <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
@@ -828,7 +744,7 @@
                 </div>
                 <h1 class="text-xl font-bold tracking-tight text-gray-800">Barış'ın Defteri</h1>
             </div>
-            
+           
             <div class="flex items-center gap-1">
                 <!-- YOUTUBE BUTONU EKLENDİ -->
                 <button onclick="openYouTubeMode()" class="p-2 bg-red-50 text-red-700 font-bold text-xs rounded-lg border border-red-200 hover:bg-red-100 flex items-center gap-1 shadow-sm transition-colors" title="YouTube Asistanı"><i data-lucide="youtube" class="w-4 h-4"></i> YT</button>
@@ -836,7 +752,6 @@
                 <button onclick="toggleSettings()" class="p-2 bg-green-50 text-green-700 font-bold text-xs rounded-lg border border-green-200 hover:bg-green-100 flex items-center gap-1 shadow-sm transition-colors" title="Yedekleme"><i data-lucide="save" class="w-4 h-4"></i> Yedek</button>
             </div>
         </div>
-
         <!-- Kategoriler -->
         <div class="overflow-x-auto py-2 px-4 no-scrollbar">
             <div class="flex gap-2 max-w-5xl mx-auto min-w-max">
@@ -851,7 +766,6 @@
             </div>
         </div>
     </header>
-
     <!-- Ana Alan -->
     <main class="flex-1 overflow-y-auto p-4 pb-24">
         <div class="max-w-5xl mx-auto space-y-6">
@@ -860,22 +774,19 @@
                 <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
                 <input type="text" id="searchInput" onkeyup="renderNotes()" placeholder="Notlarda ara..." class="w-full pl-12 pr-4 py-4 bg-white rounded-2xl shadow-sm border-none focus:ring-2 focus:ring-indigo-100 transition-all outline-none placeholder-gray-400 font-medium">
             </div>
-
             <!-- Liste -->
             <div id="notes-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-            
+           
             <div id="empty-state" class="hidden text-center py-20 opacity-50">
                 <i data-lucide="feather" class="w-16 h-16 mx-auto mb-4 text-gray-300"></i>
                 <p class="text-xl font-hand">Henüz not yok, hemen bir şeyler karala!</p>
             </div>
         </div>
     </main>
-
     <!-- FAB -->
     <button onclick="openNewNote()" class="fab hover:scale-110 transition-transform">
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
-
     <!-- SİHİRLİ SEÇİM MENÜSÜ -->
     <div id="floating-menu" class="hidden animate-fade-in">
         <button onclick="magicFixSelection()" class="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700 transition-transform hover:scale-105">
@@ -883,57 +794,51 @@
             <span class="text-xs font-bold">Düzelt</span>
         </button>
     </div>
-
-    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK + IPHONE UYUMLU) -->
+    <!-- YOUTUBE ASİSTANI MODAL (DÜZELTİLMİŞ VERSİYON) -->
     <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-bold flex items-center text-red-600"><i data-lucide="youtube" class="mr-2"></i> YouTube Asistanı</h3>
                 <button onclick="closeYouTubeMode()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
             </div>
-            
+           
             <!-- Resimli Anlatım Gibi Kılavuz -->
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
                 <h4 class="font-bold text-gray-700 text-sm mb-2">🚀 Mobilde Metin Nasıl Alınır?</h4>
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
                     <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
-                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz, iPhone uyumlu) -->
-                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                            Sunucu 1 (Git)
+                        <a href="https://youtubetranscript.com/" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
                         </a>
-                        <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" rel="noopener noreferrer" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                             Sunucu 2 (Git)
+                        <a href="https://downsub.com/" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 2
                         </a>
                     </div>
-                    
+                   
                     <!-- KOPYALANABİLİR YEDEK LİNK -->
                     <div class="mt-2">
-                        <p class="mb-1 text-gray-500">Butonlar çalışmazsa bu linki kopyala:</p>
-                        <div class="flex items-center gap-2">
-                             <input type="text" value="[https://youtubetranscript.com/](https://youtubetranscript.com/)" class="flex-1 text-[10px] text-gray-600 bg-gray-100 border rounded p-1 select-all" readonly>
-                             <!-- Basit kopyalama butonu -->
-                             <button onclick="copyLink('[https://youtubetranscript.com/](https://youtubetranscript.com/)')" class="p-1 bg-gray-200 rounded hover:bg-gray-300"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                        <p class="mb-1 text-gray-500">Butonlar çalışmazsa bu linkleri kopyala:</p>
+                        <div class="flex flex-col gap-2">
+                            <input type="text" value="https://youtubetranscript.com/" class="w-full text-[10px] text-gray-600 bg-gray-100 border rounded p-1.5 select-all font-mono" readonly>
+                            <input type="text" value="https://downsub.com/" class="w-full text-[10px] text-gray-600 bg-gray-100 border rounded p-1.5 select-all font-mono" readonly>
                         </div>
                     </div>
-
-                    <p class="opacity-75 mt-1">1. Siteye git.<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
+                    <p class="opacity-75 mt-1">1. Yukarıdaki butona tıkla.<br>2. Video linkini oraya yapıştır.<br>3. Çıkan metni kopyalayıp aşağıya yapıştır.</p>
                 </div>
             </div>
-
             <textarea id="yt-transcript" class="w-full h-40 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none resize-none mb-4 font-mono text-gray-600" placeholder="⚠️ Link değil, videonun yazılarını (transkripti) buraya yapıştır..."></textarea>
-            
+           
             <button onclick="processYouTubeTranscript()" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-lg transition-colors flex justify-center items-center gap-2">
                 <i data-lucide="sparkles" class="w-4 h-4 text-yellow-300"></i> Barışça Özetle
             </button>
         </div>
     </div>
-
     <!-- NOT MODALI (Tam Ekran) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
         <div class="absolute inset-0 md:inset-x-0 md:bottom-6 md:top-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl bg-white md:rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 translate-y-full" id="modal-panel">
-            
+           
             <!-- Header -->
             <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white z-10">
                 <button onclick="closeModal()" class="md:hidden mr-3 text-gray-500"><i data-lucide="arrow-left"></i></button>
@@ -946,20 +851,17 @@
                     <button onclick="saveCurrentNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
                 </div>
             </div>
-
             <!-- Kategori -->
             <div class="px-6 py-3 bg-gray-50/50 flex gap-2 overflow-x-auto no-scrollbar border-b border-gray-100" id="modal-cats"></div>
-
             <!-- Editör -->
             <div class="flex-1 relative bg-white group overflow-y-auto flex flex-col">
                 <div id="note-content" contenteditable="true" class="w-full flex-1 p-6 lg:p-8 outline-none text-lg leading-relaxed font-hand text-gray-700" placeholder="Notunuzu buraya yazın..."></div>
-                
+               
                 <div id="ai-loading" class="absolute inset-0 bg-white/90 z-20 hidden flex-col items-center justify-center">
                     <div class="loader mb-3"></div>
                     <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
                 </div>
             </div>
-
             <!-- Toolbar -->
             <div class="editor-toolbar p-3 pb-safe border-t border-gray-100 transition-opacity">
                 <div class="flex flex-col gap-2 max-w-lg mx-auto">
@@ -973,7 +875,7 @@
                         <button onclick="applyColor('#2563eb')" class="w-5 h-5 rounded-full bg-blue-600 border border-gray-200" title="Mavi"></button>
                         <button onclick="applyColor('#9333ea')" class="w-5 h-5 rounded-full bg-purple-600 border border-gray-200" title="Mor"></button>
                     </div>
-                    
+                   
                     <div class="flex justify-between items-center w-full">
                         <div class="flex gap-1">
                             <button onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-sm">Aa</button>
@@ -992,7 +894,7 @@
                                     <button onclick="runAI('seo_analysis')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="search-check" class="w-4 h-4"></i> SEO Analizi</button>
                                     <button onclick="runAI('image_prompts')" class="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-sm flex items-center gap-2 text-purple-700"><i data-lucide="image-plus" class="w-4 h-4"></i> Görsel Fikirleri</button>
                                     <button onclick="runAI('generate_hashtags')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="hash" class="w-4 h-4"></i> Hashtag Üret (#)</button>
-                                    
+                                   
                                     <div class="h-px bg-gray-100 my-1"></div>
                                     <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Eğitim & Analiz</div>
                                     <button onclick="runAI('analyze_mood')" class="w-full text-left px-3 py-2 hover:bg-pink-50 rounded-lg text-sm flex items-center gap-2 text-pink-700"><i data-lucide="smile" class="w-4 h-4"></i> Duygu Durumu (Mood)</button>
@@ -1001,18 +903,18 @@
                                     <button onclick="runAI('quiz')" class="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm flex items-center gap-2 text-indigo-700"><i data-lucide="brain-circuit" class="w-4 h-4"></i> Sınav Yap (Quiz)</button>
                                     <button onclick="runAI('generate_rubric')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="table-2" class="w-4 h-4"></i> Rubrik (Puanlama)</button>
                                     <button onclick="runAI('generate_analogy')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="lightbulb" class="w-4 h-4"></i> Analoji (Benzetme)</button>
-                                    
+                                   
                                     <div class="h-px bg-gray-100 my-1"></div>
                                     <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Özel Eğitim & K-12</div>
                                     <button onclick="runAI('iep_goals')" class="w-full text-left px-3 py-2 hover:bg-green-50 rounded-lg text-sm flex items-center gap-2 text-green-700"><i data-lucide="target" class="w-4 h-4"></i> BEP Hedefi Yaz</button>
                                     <button onclick="runAI('adapt_activity')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="puzzle" class="w-4 h-4"></i> Etkinlik Uyarla (İnklüzyon)</button>
                                     <button onclick="runAI('parent_message')" class="w-full text-left px-3 py-2 hover:bg-blue-50 rounded-lg text-sm flex items-center gap-2 text-blue-700"><i data-lucide="mail" class="w-4 h-4"></i> Veli Mesajı</button>
-                                    
+                                   
                                     <div class="h-px bg-gray-100 my-1"></div>
                                     <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Pedagojik Analiz</div>
                                     <button onclick="runAI('pedagogical_organizer')" class="w-full text-left px-3 py-2 hover:bg-teal-50 rounded-lg text-sm flex items-center gap-2 text-teal-700"><i data-lucide="layout-template" class="w-4 h-4"></i> Pedagojik Örgütleyici Seç</button>
                                     <button onclick="runAI('socratic_questions')" class="w-full text-left px-3 py-2 hover:bg-orange-50 rounded-lg text-sm flex items-center gap-2 text-orange-700"><i data-lucide="message-circle-question" class="w-4 h-4"></i> Sokratik Sorular</button>
-                                    
+                                   
                                     <div class="h-px bg-gray-100 my-1"></div>
                                     <div class="text-xs font-bold text-gray-400 px-3 py-1 uppercase tracking-wider">Araçlar</div>
                                     <button onclick="runAI('fix')" class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg text-sm flex items-center gap-2 text-gray-600"><i data-lucide="check" class="w-4 h-4 text-green-500"></i> Düzelt</button>
@@ -1028,7 +930,6 @@
             </div>
         </div>
     </div>
-
     <!-- WhatsApp Modal (Textarea yerine Div) -->
     <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
@@ -1055,7 +956,6 @@
             </div>
         </div>
     </div>
-
     <!-- Ayarlar Modal -->
     <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl transform transition-all scale-100">
@@ -1081,7 +981,6 @@
             </div>
         </div>
     </div>
-
     <!-- Onay Modalı -->
     <div id="confirm-modal" class="fixed inset-0 z-[80] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl text-center transform transition-all scale-100">
@@ -1096,8 +995,6 @@
             </div>
         </div>
     </div>
-
     <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[90] space-y-2 pointer-events-none"></div>
-
 </body>
 </html>
