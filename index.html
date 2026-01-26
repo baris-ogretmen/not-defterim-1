@@ -16,7 +16,7 @@
 
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v42'; // V42 - Link Markdown Hatası Temizlendi
+        const CURRENT_KEY = 'baris_final_notes_v40'; // V40 - iOS Link Fix Final
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -33,8 +33,7 @@
             'baris_final_notes_v29', 'baris_final_notes_v30', 'baris_final_notes_v31',
             'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34',
             'baris_final_notes_v35', 'baris_final_notes_v36', 'baris_final_notes_v37',
-            'baris_final_notes_v38', 'baris_final_notes_v39', 'baris_final_notes_v40',
-            'baris_final_notes_v41'
+            'baris_final_notes_v38', 'baris_final_notes_v39'
         ];
         
         let notes = [];
@@ -75,9 +74,8 @@
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
-            // Eğer evrensel boşsa, bir önceki sürümden kurtarmayı dene
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v41') || localStorage.getItem('baris_final_notes_v40');
+                 const prevData = localStorage.getItem('baris_final_notes_v39') || localStorage.getItem('baris_final_notes_v38');
                  if(prevData) allNotes = JSON.parse(prevData);
             }
 
@@ -353,7 +351,7 @@
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
 
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: `Bu metni düzelt: ${text}` }] }] })
                 });
                 const data = await res.json();
@@ -412,7 +410,7 @@
             }
         }
 
-        // --- YOUTUBE ASİSTANI (V38 FİNAL - KESİN SAF HTML LINK & COPY BUTTON) ---
+        // --- YOUTUBE ASİSTANI (V40 FİNAL - IPHONE LINK FIX) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -506,7 +504,7 @@
             document.getElementById('ai-loading').classList.add('flex');
 
             let prompt = "";
-            const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan). Asla '```html', '```', markdown formatı veya 'İşte cevabınız', 'Ben Barış Hoca' gibi giriş/çıkış cümleleri kullanma. Doğrudan <div>, <table> veya ilgili HTML etiketiyle başla.";
+            const htmlInstruction = "Cevabı sadece HTML içeriği olarak ver (<html>, ```html etiketleri olmadan).";
             
             // "KIRMIZI KALEM" & FOSFORLU VURGU
             const multiColorHighlight = `
@@ -523,7 +521,6 @@
                 Görevin: Bu notları alıp yine KENDİ AĞZINDAN (birinci tekil şahıs: 'Ben', 'Düşünüyorum ki', 'Savunuyorum') yeniden yazmak.
                 ASLA kendini tanıtma. "Ben Barış hoca..." deme. Doğrudan konuya gir.
                 "Merhaba arkadaşlar", "Bakın burası çok önemli", "Şunu unutmayın" gibi doğal, samimi bir konuşma dili kullan.
-                Cevabın SADECE İÇERİK olsun, asla sohbet etme.
             `;
 
             if (action === 'generate_title') {
@@ -538,7 +535,6 @@
                 Sanki bu videoyu izlemişim ve en can alıcı noktalarını not almışım gibi "Kısa ve Öz" bir özet çıkar.
                 ${multiColorHighlight}
                 Sloganvari ara başlıklar kullan.
-                ${htmlInstruction}
                 Metin: ${text}`;
             }
             // PEDAGOJİK ÖZELLİKLER
@@ -556,82 +552,78 @@
                     </div>
                  </div>
                  ${multiColorHighlight}
-                 ${htmlInstruction}
                  Metin: ${text}`;
             }
             // YENİ EKLENEN ÖZELLİKLER (V26)
             else if (action === 'generate_rubric') {
                 prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla.
                 HTML Tablosu (<table>) formatında ver.
-                Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} ${htmlInstruction} Metin: ${text}`;
+                Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} Metin: ${text}`;
             }
             else if (action === 'generate_hashtags') {
                 prompt = `Bu metin için sosyal medyada (Instagram, Twitter, LinkedIn) etkileşimi artıracak, konuyla ilgili en popüler 15 adet Türkçe Hashtag (#) öner.
-                Liste olarak ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". ${htmlInstruction} Metin: ${text}`;
+                Liste olarak ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". Metin: ${text}`;
             }
             else if (action === 'generate_analogy') {
                 prompt = `${persona}
                 Bu metindeki ana konuyu veya en karmaşık kavramı, günlük hayattan herkesin anlayabileceği basit ve akılda kalıcı bir ANALOJİ (benzetme) kullanarak açıkla.
                 (Örn: Trafik, Futbol, Yemek Yapmak vb.).
-                Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} ${htmlInstruction} Metin: ${text}`;
+                Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} Metin: ${text}`;
             }
             else if (action === 'email_formal') {
                 prompt = `Bu notları, bir yöneticiye, resmi kuruma veya veliye gönderilecek resmi, nazik ve profesyonel bir e-posta taslağına dönüştür.
                 Konu satırı ekle.
-                Başlık: "<h3>📧 E-Posta Taslağı</h3>". ${htmlInstruction} Metin: ${text}`;
+                Başlık: "<h3>📧 E-Posta Taslağı</h3>". Metin: ${text}`;
             }
             else if (action === 'generate_references') {
                 prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele.
-                Başlık: "<h3>📚 Kaynakça Önerisi</h3>". ${htmlInstruction} Metin: ${text}`;
+                Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
             }
             // DİĞER MODÜLLER
             else if (action === 'iep_goals') {
                 prompt = `${persona}
                 Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz.
                 Hedefler SMART (Ölçülebilir, Gözlemlenebilir) olsun.
-                HTML formatında ver. Başlık: "<h3>🎯 BEP Hedef Önerileri</h3>". ${htmlInstruction} Metin: ${text}`;
+                HTML formatında ver. Başlık: "<h3>🎯 BEP Hedef Önerileri</h3>". Metin: ${text}`;
             }
             else if (action === 'adapt_activity') {
                 prompt = `${persona}
                 Bu konuyu/etkinliği "Özel Gereksinimli" veya "Okul Öncesi" bir öğrenci için uyarla (İnklüzyon).
                 Basitleştirme, Görsel Destek, Materyal Uyarlaması ve Yönerge Basitleştirme başlıklarını kullan.
-                HTML formatında ver. Başlık: "<h3>🧩 Etkinlik Uyarlama (İnklüzyon)</h3>". ${htmlInstruction} Metin: ${text}`;
+                HTML formatında ver. Başlık: "<h3>🧩 Etkinlik Uyarlama (İnklüzyon)</h3>". Metin: ${text}`;
             }
             else if (action === 'parent_message') {
                 prompt = `${persona}
                 Bu notları baz alarak, öğrencinin velisine gönderilecek nazik, profesyonel ve işbirlikçi bir bilgilendirme mesajı yaz.
                 Gelişimi öv, evde yapılabilecek basit bir öneri ekle.
-                HTML formatında ver. Başlık: "<h3>👨‍👩‍👧 Veli Bilgilendirme Mesajı</h3>". ${htmlInstruction} Metin: ${text}`;
+                HTML formatında ver. Başlık: "<h3>👨‍👩‍👧 Veli Bilgilendirme Mesajı</h3>". Metin: ${text}`;
             }
             else if (action === 'socratic_questions') {
-                prompt = `Bu metindeki konuyu derinleştirmek için öğrencilere sorulabilecek 3 adet "Sokratik Soru" üret. HTML formatında ver. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". ${htmlInstruction} Metin: ${text}`;
+                prompt = `Bu metindeki konuyu derinleştirmek için öğrencilere sorulabilecek 3 adet "Sokratik Soru" üret. HTML formatında ver. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". Metin: ${text}`;
             }
             else if (action === 'summarize_short') {
                 prompt = `${persona}
                 Bu notları benim ağzımdan "Kısa ve Öz" bir şekilde özetle.
                 ${multiColorHighlight}
                 Sanki bir manifesto yazar gibi vurucu ve net olsun.
-                ${htmlInstruction}
                 Metin: ${text}`;
             }
             else if (action === 'blogify_short') {
                 prompt = `${persona}
                 Web sitem için "Kısa Köşe Yazısı" (Mikro-Blog) oluştur. Max 300 kelime.
                 ${multiColorHighlight}
-                Samimi, akıcı ve emojili olsun.
-                ${htmlInstruction}
-                Metin: ${text}`;
+                Samimi, akıcı ve emojili olsun. Metin: ${text}`;
             }
-            else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". ${htmlInstruction} Metin: ${text}`;
-            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. ${htmlInstruction} Metin: ${text}`;
-            else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". ${htmlInstruction} Metin: ${text}`;
-            else if (action === 'fix') prompt = `${persona} Gramer açısından düzelt. ${multiColorHighlight} ${htmlInstruction} Metin: ${text}`;
-            else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. ${htmlInstruction} Metin: ${text}`;
-            else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. ${htmlInstruction} Metin: ${text}`;
+            else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
+            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
+            else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
+            else if (action === 'fix') prompt = `${persona} Gramer açısından düzelt. ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
+            else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
 
             try {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
@@ -640,15 +632,8 @@
 
                 if(!result) throw new Error("Boş yanıt.");
 
-                // HTML Kodu Temizleme (Regex - Gelişmiş)
-                // ```html, ``` ve öncesindeki her şeyi siler
-                let cleanResult = result.replace(/```html/g, '').replace(/```/g, '');
-                
-                // İlk HTML taginden öncesini sil (Sohbet kısmını yok etmek için)
-                const firstTag = cleanResult.indexOf('<');
-                if (firstTag > -1) {
-                    cleanResult = cleanResult.substring(firstTag);
-                }
+                // HTML Kodu Temizleme (Regex)
+                let cleanResult = result.replace(/^```html\s*/i, '').replace(/```$/, '').trim();
 
                 if (action === 'whatsapp') {
                     const parts = cleanResult.split('|||');
@@ -656,12 +641,11 @@
                     closeModal();
                     document.getElementById('wp-modal').classList.remove('hidden');
                 } else if (action === 'generate_title') {
-                    // Title için HTML temizliği yapma, düz metin lazım
-                    document.getElementById('note-title').value = result.replace(/```/g, '').trim();
+                    document.getElementById('note-title').value = cleanResult.trim();
                     showToast("Başlık oluşturuldu!", "success");
                 } else if (action === 'analyze_mood') {
                     const titleEl = document.getElementById('note-title');
-                    titleEl.value = result.replace(/```/g, '').trim() + " " + titleEl.value;
+                    titleEl.value = cleanResult.trim() + " " + titleEl.value;
                     showToast("Ruh hali eklendi!", "success");
                 } else if (['extract_tasks', 'quiz', 'eli5', 'seo_analysis', 'image_prompts', 'mind_map', 'pedagogical_organizer', 'socratic_questions', 'iep_goals', 'adapt_activity', 'parent_message', 'generate_rubric', 'generate_hashtags', 'generate_analogy', 'email_formal', 'generate_references'].includes(action)) {
                     contentDiv.innerHTML += "<br><br>" + cleanResult;
@@ -757,21 +741,6 @@
             setTimeout(() => div.remove(), 3000);
         }
         
-        // KOPYALAMA YARDIMCISI (SAF HTML)
-        function copyLink(text) {
-             const textArea = document.createElement("textarea");
-             textArea.value = text;
-             textArea.style.position = "fixed"; textArea.style.left = "-9999px";
-             document.body.appendChild(textArea);
-             textArea.focus(); textArea.select();
-             try {
-                 document.execCommand('copy');
-                 showToast("Link kopyalandı! Tarayıcıya yapıştır.", "success");
-             } catch (err) {
-                 showToast("Kopyalama başarısız.", "error");
-             }
-             document.body.removeChild(textArea);
-        }
     </script>
 
     <style>
@@ -914,7 +883,7 @@
         </button>
     </div>
 
-    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK) -->
+    <!-- YOUTUBE ASİSTANI MODAL (YENİLENMİŞ - KESİN SAF HTML LINK + IPHONE UYUMLU) -->
     <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
@@ -926,13 +895,13 @@
             <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
                 <h4 class="font-bold text-gray-700 text-sm mb-2">🚀 Mobilde Metin Nasıl Alınır?</h4>
                 <div class="flex flex-col gap-3 text-xs text-gray-600">
-                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur (Linklere Tıkla):</p>
+                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
                     <div class="flex gap-2">
-                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz) -->
-                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <!-- SAF HTML LINKLER (Javascriptsiz, parantezsiz, iPhone uyumlu) -->
+                        <a href="[https://youtubetranscript.com/](https://youtubetranscript.com/)" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                             Sunucu 1 (Git)
                         </a>
-                        <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                        <a href="[https://downsub.com/](https://downsub.com/)" target="_blank" rel="noopener noreferrer" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
                              Sunucu 2 (Git)
                         </a>
                     </div>
