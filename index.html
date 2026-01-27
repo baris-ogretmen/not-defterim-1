@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v29_special_ed'; // V29 - Özel Eğitim Odaklı (Sosyal Öykü, Çizelge, Görselleştirme)
+        const CURRENT_KEY = 'baris_final_notes_v30'; // V30 - Renk Seçimi Düzeltmesi & Ekran Görüntüsü Modu
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
        
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -28,7 +28,8 @@
             'baris_final_notes_v17', 'baris_final_notes_v18', 'baris_final_notes_v19',
             'baris_final_notes_v20', 'baris_final_notes_v21', 'baris_final_notes_v22',
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
-            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28'
+            'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
+            'baris_final_notes_v29_special_ed'
         ];
        
         let notes = [];
@@ -62,12 +63,19 @@
            
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('gemini-key').value = key;
+
+            // Başlık alanı için otomatik genişleme
+            const titleInput = document.getElementById('note-title');
+            titleInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
         });
         // --- MIGRATION ---
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v28'); // v28 kontrolü
+                 const prevData = localStorage.getItem('baris_final_notes_v29_special_ed'); // v29 kontrolü
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -223,7 +231,12 @@
             const note = notes.find(n => n.id === id);
             if (!note) return;
             currentNoteId = id;
-            document.getElementById('note-title').value = note.title;
+            const titleEl = document.getElementById('note-title');
+            titleEl.value = note.title;
+            // Başlık yüksekliğini ayarla
+            titleEl.style.height = 'auto';
+            setTimeout(() => { titleEl.style.height = (titleEl.scrollHeight) + 'px'; }, 10);
+
             document.getElementById('note-content').innerHTML = note.content;
             document.getElementById('btn-delete').classList.remove('hidden');
             document.getElementById('btn-delete').onclick = function() { initiateDelete(id); };
@@ -233,7 +246,10 @@
         }
         function openNewNote() {
             currentNoteId = null;
-            document.getElementById('note-title').value = '';
+            const titleEl = document.getElementById('note-title');
+            titleEl.value = '';
+            titleEl.style.height = 'auto';
+            
             document.getElementById('note-content').innerHTML = '';
             document.getElementById('btn-delete').classList.add('hidden');
             setCategory('guncel');
@@ -249,6 +265,7 @@
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('yt-modal').classList.add('hidden');
             exitZenMode();
+            exitScreenshotMode();
             setTimeout(() => {
                 document.getElementById('note-modal').classList.add('hidden');
                 document.getElementById('ai-popup').classList.add('hidden');
@@ -334,6 +351,30 @@
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('#note-modal .border-b').classList.remove('border-transparent');
         }
+        // --- EKRAN GÖRÜNTÜSÜ MODU ---
+        function toggleScreenshotMode() {
+            const modal = document.getElementById('modal-panel');
+            modal.classList.toggle('screenshot-mode');
+            
+            if(modal.classList.contains('screenshot-mode')) {
+                showToast("Ekran Görüntüsü Modu. Çıkmak için dokun.", "success");
+                // Moddan çıkmak için event listener ekle
+                setTimeout(() => {
+                    document.addEventListener('click', exitScreenshotModeOutside, {once: true});
+                }, 100);
+            }
+        }
+        function exitScreenshotMode() {
+            document.getElementById('modal-panel').classList.remove('screenshot-mode');
+        }
+        function exitScreenshotModeOutside(e) {
+            // Renk butonlarına falan basılınca çıkmasın diye kontrol eklenebilir ama 
+            // şimdilik basitçe her yere tıklayınca çıksın
+            if(!e.target.closest('.editor-toolbar')) { // Toolbara tıklayınca çıkma (gerçi toolbar gizli)
+                exitScreenshotMode();
+            }
+        }
+
         function handleSlashCommands(e) {
             const editor = document.getElementById('note-content');
             const selection = window.getSelection();
@@ -798,6 +839,38 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         /* Floating Menu */
         #floating-menu { position: fixed; z-index: 100; transform: translate(-50%, -100%); }
+
+        /* Ekran Görüntüsü Modu Stilleri */
+        #modal-panel.screenshot-mode {
+            position: fixed !important;
+            inset: 0 !important;
+            border-radius: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            display: flex;
+            flex-direction: column;
+            background: white !important;
+            overflow: hidden;
+        }
+        #modal-panel.screenshot-mode .editor-toolbar,
+        #modal-panel.screenshot-mode #modal-cats,
+        #modal-panel.screenshot-mode .modal-header-buttons {
+            display: none !important;
+        }
+        #modal-panel.screenshot-mode #note-title {
+            font-size: 2.5rem !important; /* Daha büyük başlık */
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #111827;
+        }
+        #modal-panel.screenshot-mode .border-b {
+            border-bottom: none !important;
+        }
+        #modal-panel.screenshot-mode #note-content {
+            padding: 2rem !important;
+            font-size: 1.25rem !important; /* Daha okunaklı içerik */
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800">
@@ -907,12 +980,13 @@
            
             <!-- Header -->
             <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white z-10">
-                <button onclick="closeModal()" class="md:hidden mr-3 text-gray-500"><i data-lucide="arrow-left"></i></button>
+                <button onclick="closeModal()" class="md:hidden mr-3 text-gray-500 modal-header-buttons"><i data-lucide="arrow-left"></i></button>
                 <div class="relative flex-1 mr-2">
-                    <input type="text" id="note-title" placeholder="Başlık" class="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 w-full pr-8 text-gray-800 placeholder-gray-300">
-                    <button onclick="runAI('generate_title')" class="absolute right-0 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-indigo-600 p-1" title="Otomatik Başlık"><i data-lucide="wand-2" class="w-4 h-4"></i></button>
+                    <textarea id="note-title" placeholder="Başlık" rows="1" class="text-xl font-bold bg-transparent border-none focus:ring-0 p-0 w-full pr-8 text-gray-800 placeholder-gray-300 resize-none overflow-hidden"></textarea>
+                    <button onclick="runAI('generate_title')" class="absolute right-0 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-indigo-600 p-1 modal-header-buttons" title="Otomatik Başlık"><i data-lucide="wand-2" class="w-4 h-4"></i></button>
                 </div>
-                <div class="flex gap-2 items-center">
+                <div class="flex gap-2 items-center modal-header-buttons">
+                    <button onclick="toggleScreenshotMode()" class="text-gray-500 hover:bg-gray-100 p-2 rounded-full transition-colors" title="Ekran Görüntüsü Modu (Gizle)"><i data-lucide="camera" class="w-5 h-5"></i></button>
                     <button id="btn-delete" class="hidden text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Sil"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
                     <button onclick="saveCurrentNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
                 </div>
@@ -933,13 +1007,13 @@
                 <div class="flex flex-col gap-2 max-w-lg mx-auto">
                     <!-- Renkler -->
                     <div class="flex gap-2 overflow-x-auto py-1 no-scrollbar justify-center">
-                        <button onclick="applyColor('#000000')" class="w-5 h-5 rounded-full bg-black border border-gray-200" title="Siyah"></button>
-                        <button onclick="applyColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600 border border-gray-200" title="Kırmızı"></button>
-                        <button onclick="applyColor('#ea580c')" class="w-5 h-5 rounded-full bg-orange-600 border border-gray-200" title="Turuncu"></button>
-                        <button onclick="applyColor('#ca8a04')" class="w-5 h-5 rounded-full bg-yellow-600 border border-gray-200" title="Altın"></button>
-                        <button onclick="applyColor('#16a34a')" class="w-5 h-5 rounded-full bg-green-600 border border-gray-200" title="Yeşil"></button>
-                        <button onclick="applyColor('#2563eb')" class="w-5 h-5 rounded-full bg-blue-600 border border-gray-200" title="Mavi"></button>
-                        <button onclick="applyColor('#9333ea')" class="w-5 h-5 rounded-full bg-purple-600 border border-gray-200" title="Mor"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#000000')" onclick="applyColor('#000000')" class="w-5 h-5 rounded-full bg-black border border-gray-200" title="Siyah"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#dc2626')" onclick="applyColor('#dc2626')" class="w-5 h-5 rounded-full bg-red-600 border border-gray-200" title="Kırmızı"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#ea580c')" onclick="applyColor('#ea580c')" class="w-5 h-5 rounded-full bg-orange-600 border border-gray-200" title="Turuncu"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#ca8a04')" onclick="applyColor('#ca8a04')" class="w-5 h-5 rounded-full bg-yellow-600 border border-gray-200" title="Altın"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#16a34a')" onclick="applyColor('#16a34a')" class="w-5 h-5 rounded-full bg-green-600 border border-gray-200" title="Yeşil"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#2563eb')" onclick="applyColor('#2563eb')" class="w-5 h-5 rounded-full bg-blue-600 border border-gray-200" title="Mavi"></button>
+                        <button onmousedown="event.preventDefault(); applyColor('#9333ea')" onclick="applyColor('#9333ea')" class="w-5 h-5 rounded-full bg-purple-600 border border-gray-200" title="Mor"></button>
                     </div>
                    
                     <div class="flex justify-between items-center w-full">
