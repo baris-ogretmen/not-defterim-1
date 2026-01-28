@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v33'; // V33 - Yüzen Renk Paleti, Geri Al/İleri Al, Mobil Dokunma Fix
+        const CURRENT_KEY = 'baris_final_notes_v34'; // V34 - Tek Dokunuşla Menü, Akıllı Kelime Seçimi, Renk Reset
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
        
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -30,7 +30,7 @@
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
             'baris_final_notes_v29_special_ed', 'baris_final_notes_v30', 'baris_final_notes_v31',
-            'baris_final_notes_v32'
+            'baris_final_notes_v32', 'baris_final_notes_v33'
         ];
        
         let notes = [];
@@ -68,6 +68,9 @@
             '#84cc16', '#facc15', '#fb923c', '#f87171', '#f472b6', '#a78bfa', '#818cf8', // Pasteller
             '#60a5fa', '#38bdf8', '#2dd4bf', '#34d399', '#a3e635', '#fde047', '#fbbf24'  // Neonumsu
         ];
+        
+        // Varsayılan metin rengi (Reset için)
+        const DEFAULT_TEXT_COLOR = '#374151'; // Gray-700
 
         // --- BAŞLATMA ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -75,7 +78,7 @@
             loadNotes();
             setupVoice();
             renderColorPalette();
-            // CSS stili komutları aktif et (Daha güçlü renk değişimi için)
+            // CSS stili komutları aktif et (Daha güçlü renk değişimi ve AI stillerini ezmek için)
             document.execCommand('styleWithCSS', false, true);
             
             if (window.lucide) lucide.createIcons();
@@ -84,12 +87,11 @@
             const titleEditor = document.getElementById('note-title');
             
             [editor, titleEditor].forEach(el => {
-                el.addEventListener('mouseup', checkSelection);
-                el.addEventListener('keyup', (e) => {
-                    checkSelection();
-                    handleSlashCommands(e);
-                });
-                el.addEventListener('touchend', () => setTimeout(checkSelection, 100)); // Mobil için gecikmeli kontrol
+                // Sadece click ve keyup değil, her türlü etkileşimde kontrol et
+                el.addEventListener('mouseup', () => setTimeout(checkSelection, 10)); // Gecikme önemli
+                el.addEventListener('keyup', () => setTimeout(checkSelection, 10));
+                el.addEventListener('touchend', () => setTimeout(checkSelection, 50)); // Mobil için kritik
+                el.addEventListener('input', () => setTimeout(checkSelection, 50));
             });
            
             const key = localStorage.getItem('gemini_api_key');
@@ -98,7 +100,14 @@
 
         function renderColorPalette() {
             const container = document.getElementById('color-palette');
+            // Sıfırla butonu en başa
             let html = `
+                <div class="relative group shrink-0" title="Rengi Sıfırla (Orijinal)">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="applyColor('${DEFAULT_TEXT_COLOR}')" class="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-300 shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
+                        <i data-lucide="x" class="w-5 h-5 text-gray-500"></i>
+                    </button>
+                </div>
+                <div class="w-px h-8 bg-gray-300 mx-2 shrink-0 rounded-full"></div>
                 <div class="relative group shrink-0">
                     <input type="color" id="custom-color-picker" class="absolute inset-0 opacity-0 w-10 h-10 cursor-pointer" onchange="applyColor(this.value)">
                     <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
@@ -109,9 +118,8 @@
             `;
             
             COLORS.forEach(color => {
-                // ontouchstart="event.preventDefault()" -> MOBİLDE KLAVYE KAPANMASINI VE SEÇİMİN GİTMESİNİ ENGELLER
                 html += `
-                    <button onmousedown="event.preventDefault(); applyColor('${color}')" 
+                    <button onmousedown="event.preventDefault()" applyColor('${color}')" 
                             ontouchstart="event.preventDefault(); applyColor('${color}')"
                             class="w-10 h-10 rounded-full border-2 border-white shadow-md hover:scale-110 active:scale-90 transition-transform shrink-0" 
                             style="background-color: ${color};" 
@@ -126,7 +134,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v32'); // v32 kontrolü
+                 const prevData = localStorage.getItem('baris_final_notes_v33'); // v33 kontrolü
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -358,48 +366,107 @@
             const editor = document.getElementById('note-content');
             editor.className = `w-full h-full p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
         }
+        
+        // --- GELİŞMİŞ RENK UYGULAMA (SEÇİM YOKSA KELİMEYİ BUL) ---
         function applyColor(color) {
-            // styleWithCSS true olduğu için span ile renk verir, classları ezer
-            document.execCommand('styleWithCSS', false, true); 
+            // Önce CSS modunu garantile (span style='color:...' kullanır)
+            document.execCommand('styleWithCSS', false, true);
+            
+            const selection = window.getSelection();
+            
+            // Eğer seçim yoksa (imleç yanıp sönüyorsa), imlecin olduğu kelimeyi seç!
+            if (selection.isCollapsed) {
+                const wordRange = getWordAtCaret();
+                if (wordRange) {
+                    selection.removeAllRanges();
+                    selection.addRange(wordRange);
+                }
+            }
+
+            // Rengi uygula (AI classlarını ezmek için styleWithCSS şart)
             document.execCommand('foreColor', false, color);
-            // Yüzen menü açıksa gizle (işlem bitti)
+            
+            // Seçimi temizle ki renk net görünsün
+            selection.removeAllRanges();
+            
+            // Menüleri kapat
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('floating-colors').classList.add('hidden');
         }
         
+        // İmlecin altındaki kelimeyi bulan yardımcı fonksiyon
+        function getWordAtCaret() {
+            const sel = window.getSelection();
+            if (sel.rangeCount === 0) return null;
+            const range = sel.getRangeAt(0);
+            if (!range.collapsed) return range; // Zaten seçim varsa onu kullan
+
+            const node = range.startContainer;
+            if (node.nodeType !== Node.TEXT_NODE) return null;
+
+            const text = node.textContent;
+            const offset = range.startOffset;
+
+            // Kelimenin başını ve sonunu bul (Boşluklara kadar git)
+            let start = offset;
+            while (start > 0 && /\S/.test(text[start - 1])) start--;
+            let end = offset;
+            while (end < text.length && /\S/.test(text[end])) end++;
+
+            if (start === end) return null; // Kelime yok
+
+            const newRange = document.createRange();
+            newRange.setStart(node, start);
+            newRange.setEnd(node, end);
+            return newRange;
+        }
+        
+        function applyFloatingColor(color) { applyColor(color); }
         function undo() { document.execCommand('undo'); }
         function redo() { document.execCommand('redo'); }
 
         function updateStats() { /* Kaldırıldı */ }
         
-        // --- YÜZEN MENÜ SİSTEMİ (REVIZE EDİLDİ) ---
+        // --- SİHİRLİ SEÇİM & DOKUNMA MENÜSÜ ---
         function checkSelection() {
             const selection = window.getSelection();
             const floatingMenu = document.getElementById('floating-menu');
             
-            // Seçim yoksa her şeyi gizle
-            if (!selection.toString().trim().length) {
+            let rect;
+            let show = false;
+
+            // 1. Durum: Metin Seçili
+            if (!selection.isCollapsed && selection.toString().trim().length > 0) {
+                rect = selection.getRangeAt(0).getBoundingClientRect();
+                show = true;
+            } 
+            // 2. Durum: İmleç Kelime İçinde (Tek Dokunuş)
+            else if (selection.isCollapsed) {
+                const wordRange = getWordAtCaret(); // Kelime var mı bak
+                if (wordRange) {
+                    rect = wordRange.getBoundingClientRect();
+                    show = true;
+                }
+            }
+
+            if (show && rect) {
+                // Menüyü konumlandır
+                let top = rect.top - 60;
+                if (top < 10) top = rect.bottom + 10; 
+                
+                floatingMenu.style.top = `${top}px`;
+                floatingMenu.style.left = `${rect.left + (rect.width / 2) - 80}px`; 
+                
+                // Alt menüler kapalıysa ana menüyü göster
+                if (document.getElementById('magic-options').classList.contains('hidden') && 
+                    document.getElementById('floating-colors').classList.contains('hidden')) {
+                    floatingMenu.classList.remove('hidden');
+                }
+            } else {
+                // Sadece seçim yoksa ve kelime üstünde değilse gizle
                 floatingMenu.classList.add('hidden');
                 document.getElementById('magic-options').classList.add('hidden');
                 document.getElementById('floating-colors').classList.add('hidden');
-                return;
-            }
-
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-            
-            let top = rect.top - 60;
-            if (top < 10) top = rect.bottom + 10; 
-            
-            // Menüyü konumlandır
-            floatingMenu.style.top = `${top}px`;
-            // Ortala
-            floatingMenu.style.left = `${rect.left + (rect.width / 2) - 80}px`; 
-            
-            // Eğer alt menülerden biri açıksa ana menüyü gösterme, yoksa göster
-            if (document.getElementById('magic-options').classList.contains('hidden') && 
-                document.getElementById('floating-colors').classList.contains('hidden')) {
-                floatingMenu.classList.remove('hidden');
             }
         }
 
@@ -407,7 +474,6 @@
         function showMagicOptions() {
             document.getElementById('floating-menu').classList.add('hidden');
             const menu = document.getElementById('magic-options');
-            // Konumunu floating menu ile aynı yap
             menu.style.top = document.getElementById('floating-menu').style.top;
             menu.style.left = document.getElementById('floating-menu').style.left;
             menu.classList.remove('hidden');
@@ -421,14 +487,18 @@
             menu.classList.remove('hidden');
         }
 
-        // Renk Uygula (Yüzen Menüden)
-        function applyFloatingColor(color) {
-            applyColor(color);
-        }
-
         // AI İşlemi
         function applyMagicFix(type) {
             const selection = window.getSelection();
+            // Seçim yoksa kelimeyi seç
+            if (selection.isCollapsed) {
+                const wordRange = getWordAtCaret();
+                if(wordRange) {
+                    selection.removeAllRanges();
+                    selection.addRange(wordRange);
+                }
+            }
+            
             const text = selection.toString();
             if(!text) return;
             
@@ -1025,6 +1095,9 @@
 
     <!-- Hızlı Renk Alt Menü (YENİ) -->
     <div id="floating-colors" class="hidden absolute z-[60] bg-white rounded-full shadow-xl border border-gray-100 p-2 animate-fade-in mt-2 flex gap-2">
+        <!-- Orijinal Renge Dön (Reset) -->
+        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#374151')" class="w-6 h-6 rounded-full bg-gray-500 border border-gray-200 flex items-center justify-center" title="Sıfırla"><i data-lucide="x" class="w-3 h-3 text-white"></i></button>
+        <div class="w-px h-6 bg-gray-200 mx-1"></div>
         <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#000000')" class="w-6 h-6 rounded-full bg-black border border-gray-200"></button>
         <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#dc2626')" class="w-6 h-6 rounded-full bg-red-600 border border-gray-200"></button>
         <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#2563eb')" class="w-6 h-6 rounded-full bg-blue-600 border border-gray-200"></button>
