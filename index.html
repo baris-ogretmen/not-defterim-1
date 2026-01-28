@@ -9,24 +9,22 @@
     <script src="https://cdn.tailwindcss.com"></script>
    
     <!-- Google Fonts (Genişletilmiş Paket) -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Kalam:wght@300;400;700&family=Merriweather:wght@300;400;700;900&family=Courier+Prime:wght@400;700&family=Patrick+Hand&family=Caveat:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Oswald:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Kalam:wght@300;400;700&family=Merriweather:wght@300;400;700;900&family=Courier+Prime:wght@400;700&family=Patrick+Hand&family=Caveat:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Oswald:wght@400;700&family=Roboto+Mono:wght@400;700&family=Pacifico&family=Comfortaa:wght@300;400;700&display=swap" rel="stylesheet">
    
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v40'; // V40 - Gemini 2.5 Flash Preview, Klavye Fix, Layout Fix
+        const CURRENT_KEY = 'baris_final_notes_v42'; // V42 - Klavye Üstü Toolbar, Akıllı Menü, Gemini 2.5 Flash
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
         
-        // GÜNCEL ÇALIŞAN MODEL (Hata vermemesi için bunu kullanıyoruz)
+        // SENİN İSTEDİĞİN MODEL (Sistemde çalışan en güncel flash)
         const AI_MODEL = "gemini-2.5-flash-preview-09-2025";
        
-        // Tüm eski versiyon anahtarları (Kurtarma için)
+        // Tüm eski versiyon anahtarları (Veri Kurtarma için)
         const LEGACY_KEYS = [
-            'baris_final_notes_v30', 'baris_final_notes_v31', 'baris_final_notes_v32', 
-            'baris_final_notes_v33', 'baris_final_notes_v34', 'baris_final_notes_v35', 
-            'baris_final_notes_v36', 'baris_final_notes_v37', 'baris_final_notes_v38',
-            'baris_final_notes_v39'
+            'baris_final_notes_v35', 'baris_final_notes_v36', 'baris_final_notes_v37', 'baris_final_notes_v38',
+            'baris_final_notes_v39', 'baris_final_notes_v40', 'baris_final_notes_v41'
         ];
        
         let notes = [];
@@ -41,18 +39,6 @@
         let isHighlightMode = false; 
         let isColorGridMode = false; 
         
-        // Kategori Renk Eşleşmeleri
-        const CATEGORY_COLORS = {
-            'tarih': 'text-red-600 border-red-200 bg-red-50',
-            'dini': 'text-green-600 border-green-200 bg-green-50',
-            'siyasi': 'text-blue-600 border-blue-200 bg-blue-50',
-            'egitim': 'text-yellow-600 border-yellow-200 bg-yellow-50',
-            'guncel': 'text-cyan-600 border-cyan-200 bg-cyan-50',
-            'is': 'text-slate-600 border-slate-200 bg-slate-50',
-            'kisisel': 'text-fuchsia-600 border-fuchsia-200 bg-fuchsia-50',
-            'diger': 'text-gray-600 border-gray-200 bg-gray-50'
-        };
-
         const CATEGORIES = {
             'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi',
             'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş',
@@ -85,6 +71,9 @@
             loadNotes();
             setupVoice();
             renderColorPalette();
+            // Klavye üstü paleti de render et
+            renderStickyPalette();
+            
             document.execCommand('styleWithCSS', false, true);
             
             if (window.lucide) lucide.createIcons();
@@ -92,32 +81,39 @@
             const editor = document.getElementById('note-content');
             const titleEditor = document.getElementById('note-title');
             
-            // KLAVYE BUTONU MANTIĞI (Daha Hassas)
-            const toggleKeyboardBtn = (show) => {
-                const btn = document.getElementById('keyboard-dismiss-btn');
+            // KLAVYE YÖNETİMİ & DOKUNMATİK
+            const handleInteraction = (e) => {
+                setTimeout(() => {
+                    checkSelection();
+                    updateWordCount();
+                }, 50);
+            };
+
+            const toggleStickyBar = (show) => {
+                const bar = document.getElementById('sticky-keyboard-bar');
                 if(show) {
-                    btn.classList.remove('hidden', 'translate-y-20', 'opacity-0');
+                    bar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
                 } else {
-                    btn.classList.add('translate-y-20', 'opacity-0');
-                    setTimeout(() => btn.classList.add('hidden'), 300);
+                    bar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
                 }
             };
 
             [editor, titleEditor].forEach(el => {
-                el.addEventListener('mouseup', () => setTimeout(checkSelection, 10)); 
-                el.addEventListener('keyup', () => setTimeout(checkSelection, 10));
-                el.addEventListener('touchend', () => setTimeout(checkSelection, 50)); 
-                el.addEventListener('input', () => setTimeout(checkSelection, 50));
+                el.addEventListener('mouseup', handleInteraction); 
+                el.addEventListener('keyup', (e) => {
+                    handleInteraction();
+                    handleSlashCommands(e);
+                });
+                el.addEventListener('touchend', handleInteraction); 
+                el.addEventListener('input', handleInteraction);
                 
-                // Klavye açıldığında butonu göster
-                el.addEventListener('focus', () => toggleKeyboardBtn(true));
-                // Klavye kapandığında (blur) butonu gizle (hafif gecikmeli)
-                el.addEventListener('blur', (e) => {
+                // Klavye açılınca sticky bar'ı göster
+                el.addEventListener('focus', () => toggleStickyBar(true));
+                el.addEventListener('blur', () => {
                     setTimeout(() => {
-                        // Eğer odağı alan yeni eleman klavye butonu değilse gizle
-                        // (Butona basınca klavye kapanır ama buton kaybolmaz hemen)
-                        if (document.activeElement.id !== 'keyboard-dismiss-btn') {
-                            toggleKeyboardBtn(false);
+                         // Eğer odak hala editörlerde veya araçlardaysa kapatma
+                        if (!document.activeElement.closest('.sticky-tools')) {
+                            toggleStickyBar(false);
                         }
                     }, 200);
                 });
@@ -127,91 +123,108 @@
             if(key) document.getElementById('gemini-key').value = key;
         });
 
+        // KELİME & KARAKTER SAYACI
+        function updateWordCount() {
+            const text = document.getElementById('note-content').innerText || "";
+            const charCount = text.length;
+            const wordCount = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
+            document.getElementById('word-count-display').innerText = `${wordCount} Kelime | ${charCount} Karakter`;
+        }
+
         function toggleHighlightMode(mode) {
             isHighlightMode = mode;
-            const textBtn = document.getElementById('btn-mode-text');
-            const highlightBtn = document.getElementById('btn-mode-highlight');
+            // Tüm butonları güncelle (Sticky + Bottom)
+            const updateUI = (prefix) => {
+                const textBtn = document.getElementById(`${prefix}btn-mode-text`);
+                const highlightBtn = document.getElementById(`${prefix}btn-mode-highlight`);
+                if(!textBtn || !highlightBtn) return;
+
+                if (mode) {
+                    textBtn.classList.remove('bg-gray-800', 'text-white');
+                    textBtn.classList.add('bg-white', 'text-gray-600');
+                    highlightBtn.classList.add('bg-yellow-400', 'text-white', 'border-yellow-500');
+                    highlightBtn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+                } else {
+                    textBtn.classList.add('bg-gray-800', 'text-white');
+                    textBtn.classList.remove('bg-white', 'text-gray-600');
+                    highlightBtn.classList.remove('bg-yellow-400', 'text-white', 'border-yellow-500');
+                    highlightBtn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+                }
+            };
             
-            if (mode) {
-                textBtn.classList.remove('bg-gray-800', 'text-white');
-                textBtn.classList.add('bg-white', 'text-gray-600');
-                highlightBtn.classList.add('bg-yellow-400', 'text-white', 'border-yellow-500');
-                highlightBtn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
-                showToast("Fosforlu Kalem Modu Açık 🖍️", "success");
-            } else {
-                textBtn.classList.add('bg-gray-800', 'text-white');
-                textBtn.classList.remove('bg-white', 'text-gray-600');
-                highlightBtn.classList.remove('bg-yellow-400', 'text-white', 'border-yellow-500');
-                highlightBtn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
-                showToast("Yazı Rengi Modu Açık 🅰️", "success");
-            }
+            updateUI(''); // Alt toolbar
+            updateUI('sticky-'); // Klavye üstü toolbar
+            
+            showToast(mode ? "Fosforlu Kalem Modu 🖍️" : "Yazı Rengi Modu 🅰️", "success");
         }
 
         function toggleColorGrid() {
             isColorGridMode = !isColorGridMode;
             renderColorPalette();
+            // Sticky bar her zaman scroll olsun, yer kaplamasın
         }
 
-        function renderColorPalette() {
-            const container = document.getElementById('color-palette');
-            
-            if (isColorGridMode) {
-                container.classList.remove('flex', 'overflow-x-auto', 'no-scrollbar');
-                container.classList.add('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
-            } else {
-                container.classList.add('flex', 'overflow-x-auto', 'no-scrollbar');
-                container.classList.remove('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
-            }
-
+        // HTML Şablon Oluşturucu
+        function createPaletteHTML(prefix = '') {
             let html = `
                 <!-- Mod Seçici -->
-                <div class="${isColorGridMode ? 'col-span-2' : ''} flex gap-1 shrink-0 mr-2 bg-gray-100 p-1 rounded-full items-center justify-center">
-                    <button id="btn-mode-text" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(false)" class="w-8 h-8 rounded-full ${!isHighlightMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'} flex items-center justify-center transition-all shadow-sm">
+                <div class="flex gap-1 shrink-0 mr-2 bg-gray-100 p-1 rounded-full items-center justify-center sticky-tools">
+                    <button id="${prefix}btn-mode-text" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(false)" class="w-8 h-8 rounded-full ${!isHighlightMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'} flex items-center justify-center transition-all shadow-sm">
                         <span class="font-serif font-bold text-lg">A</span>
                     </button>
-                    <button id="btn-mode-highlight" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(true)" class="w-8 h-8 rounded-full ${isHighlightMode ? 'bg-yellow-400 text-white border-yellow-500' : 'bg-white text-gray-600 border-gray-200'} flex items-center justify-center transition-all border">
+                    <button id="${prefix}btn-mode-highlight" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(true)" class="w-8 h-8 rounded-full ${isHighlightMode ? 'bg-yellow-400 text-white border-yellow-500' : 'bg-white text-gray-600 border-gray-200'} flex items-center justify-center transition-all border">
                         <i data-lucide="highlighter" class="w-4 h-4"></i>
                     </button>
                 </div>
-
-                <!-- Grid/Scroll Toggle -->
-                <div class="relative group shrink-0" title="Görünümü Değiştir">
-                    <button onmousedown="event.preventDefault()" onclick="toggleColorGrid()" class="w-10 h-10 rounded-full bg-white border-2 border-indigo-200 shadow-sm flex items-center justify-center transform active:scale-90 transition-transform">
-                        <i data-lucide="${isColorGridMode ? 'minus' : 'grid'}" class="w-4 h-4 text-indigo-500"></i>
-                    </button>
-                </div>
-
                 <!-- Sıfırla -->
-                <div class="relative group shrink-0" title="Rengi Sıfırla">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="resetColor()" class="w-10 h-10 rounded-full bg-white border-2 border-gray-200 shadow-sm flex items-center justify-center transform active:scale-90 transition-transform">
+                <div class="relative group shrink-0 sticky-tools" title="Rengi Sıfırla">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="resetColor()" class="w-9 h-9 rounded-full bg-white border border-gray-300 shadow-sm flex items-center justify-center transform active:scale-90 transition-transform">
                         <i data-lucide="eraser" class="w-4 h-4 text-gray-500"></i>
                     </button>
                 </div>
-                
-                ${!isColorGridMode ? '<div class="w-px h-8 bg-gray-300 mx-1 shrink-0 rounded-full"></div>' : ''}
+                <div class="w-px h-6 bg-gray-300 mx-2 shrink-0 rounded-full"></div>
             `;
             
             COLORS.forEach(color => {
                 html += `
                     <button onmousedown="event.preventDefault()" onclick="applyColor('${color}')" 
                             ontouchstart="event.preventDefault(); applyColor('${color}')"
-                            class="w-10 h-10 rounded-full border-2 border-white shadow-sm hover:scale-110 active:scale-90 transition-transform shrink-0" 
+                            class="w-9 h-9 rounded-full border-2 border-white shadow-sm hover:scale-110 active:scale-90 transition-transform shrink-0 sticky-tools" 
                             style="background-color: ${color};" 
                             title="${color}"></button>
                 `;
             });
-            
-            // Özel Renk Seçici
              html += `
-                <div class="relative group shrink-0 ml-1">
-                    <input type="color" id="custom-color-picker" class="absolute inset-0 opacity-0 w-10 h-10 cursor-pointer" onchange="applyColor(this.value)">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
-                        <i data-lucide="plus" class="w-5 h-5 text-white"></i>
+                <div class="relative group shrink-0 ml-1 sticky-tools">
+                    <input type="color" class="absolute inset-0 opacity-0 w-9 h-9 cursor-pointer" onchange="applyColor(this.value)">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-9 h-9 rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
+                        <i data-lucide="plus" class="w-4 h-4 text-white"></i>
                     </button>
                 </div>
             `;
-            
-            container.innerHTML = html;
+            return html;
+        }
+
+        function renderColorPalette() {
+            const container = document.getElementById('color-palette'); 
+            if (!container) return;
+
+            if (isColorGridMode) {
+                container.classList.remove('flex', 'overflow-x-auto', 'no-scrollbar', 'items-center');
+                container.classList.add('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
+            } else {
+                container.classList.add('flex', 'overflow-x-auto', 'no-scrollbar', 'items-center');
+                container.classList.remove('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
+            }
+            container.innerHTML = createPaletteHTML();
+            if (window.lucide) lucide.createIcons();
+        }
+
+        // KLAVYE ÜSTÜ YAPIŞKAN PALET (YENİ)
+        function renderStickyPalette() {
+            const container = document.getElementById('sticky-palette-inner');
+            if(!container) return;
+            container.innerHTML = createPaletteHTML('sticky-');
             if (window.lucide) lucide.createIcons();
         }
 
@@ -219,7 +232,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v39'); 
+                 const prevData = localStorage.getItem('baris_final_notes_v41'); 
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -426,6 +439,7 @@
             document.getElementById('modal-panel').classList.add('translate-y-full');
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('yt-modal').classList.add('hidden');
+            document.getElementById('sticky-keyboard-bar').classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
             exitZenMode();
             exitScreenshotMode();
             setTimeout(() => {
@@ -449,12 +463,17 @@
         function setFont(fontClass) {
             currentFont = fontClass;
             const editor = document.getElementById('note-content');
-            editor.className = `w-full h-full p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
+            // Mevcut font classlarını temizle
+            const classes = editor.className.split(' ').filter(c => !c.startsWith('font-')).join(' ');
+            editor.className = `${classes} ${fontClass}`;
         }
+        
+        // --- GELİŞMİŞ RENK UYGULAMA ---
         function applyColor(color) {
             document.execCommand('styleWithCSS', false, true);
             const selection = window.getSelection();
             
+            // Seçim yoksa kelimeyi otomatik seç
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if (wordRange) {
@@ -468,7 +487,11 @@
             } else {
                 document.execCommand('foreColor', false, color);
             }
-            selection.removeAllRanges();
+            
+            // Eğer seçim yapıldıysa koru, yoksa temizle
+            // Mobilde seçimi korumak daha iyi olabilir
+            // selection.removeAllRanges();
+            
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('floating-colors').classList.add('hidden');
         }
@@ -486,7 +509,7 @@
             }
             document.execCommand('removeFormat', false, null); 
             document.execCommand('foreColor', false, DEFAULT_TEXT_COLOR); 
-            selection.removeAllRanges();
+            // selection.removeAllRanges();
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('floating-colors').classList.add('hidden');
         }
@@ -508,6 +531,7 @@
             const text = node.textContent;
             const offset = range.startOffset;
 
+            // Kelimenin başını ve sonunu bul
             let start = offset;
             while (start > 0 && /\S/.test(text[start - 1])) start--;
             let end = offset;
@@ -525,26 +549,32 @@
         function undo() { document.execCommand('undo'); }
         function redo() { document.execCommand('redo'); }
         
+        // KLAVYE KAPATMA (OKEY) FONKSİYONU
         function toggleKeyboard() {
-            if (document.activeElement) {
+            const editor = document.getElementById('note-content');
+            const title = document.getElementById('note-title');
+            
+            if (document.activeElement === editor || document.activeElement === title) {
                 document.activeElement.blur();
-                // Butonu hemen gizleme, blur event'i halledecek
+                showToast("Klavye kapatıldı ✅", "success");
             }
         }
 
         function updateStats() { /* Kaldırıldı */ }
         
-        // --- SİHİRLİ SEÇİM ---
+        // --- SİHİRLİ SEÇİM (Smart Touch) ---
         function checkSelection() {
             const selection = window.getSelection();
             const floatingMenu = document.getElementById('floating-menu');
             let rect;
             let show = false;
 
+            // 1. Durum: Metin Seçili
             if (!selection.isCollapsed && selection.toString().trim().length > 0) {
                 rect = selection.getRangeAt(0).getBoundingClientRect();
                 show = true;
             } 
+            // 2. Durum: İmleç Kelime İçinde (Tek Dokunuş)
             else if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret(); 
                 if (wordRange) {
@@ -560,6 +590,7 @@
                 floatingMenu.style.top = `${top}px`;
                 floatingMenu.style.left = `${rect.left + (rect.width / 2) - 80}px`; 
                 
+                // Alt menüler kapalıysa ana menüyü göster
                 if (document.getElementById('magic-options').classList.contains('hidden') && 
                     document.getElementById('floating-colors').classList.contains('hidden')) {
                     floatingMenu.classList.remove('hidden');
@@ -589,6 +620,7 @@
 
         function applyMagicFix(type) {
             const selection = window.getSelection();
+            // Otomatik kelime seçimi
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if(wordRange) {
@@ -616,7 +648,7 @@
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
             showToast("Sihir yapılıyor...", "success");
             try {
-                // MODEL UPDATE
+                // MODEL FIX: AI_MODEL sabiti kullanılıyor
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
@@ -638,7 +670,7 @@
             isZenMode = !isZenMode;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
-            const palette = document.getElementById('color-scroll-area');
+            const palette = document.getElementById('color-palette');
             if (isZenMode) {
                 modal.classList.add('!inset-0', '!max-w-none', '!rounded-none');
                 if(toolbar) toolbar.classList.add('hidden');
@@ -652,7 +684,7 @@
             isZenMode = false;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
-            const palette = document.getElementById('color-scroll-area');
+            const palette = document.getElementById('color-palette');
             modal.classList.remove('!inset-0', '!max-w-none', '!rounded-none');
             if(toolbar) toolbar.classList.remove('hidden');
             if(palette) palette.classList.remove('hidden');
@@ -674,6 +706,7 @@
             document.getElementById('modal-panel').classList.remove('screenshot-mode');
         }
         function exitScreenshotModeOutside(e) {
+            // Herhangi bir yere basınca çık
             if(!e.target.closest('.bottom-toolbar-container')) {
                 exitScreenshotMode();
             }
@@ -887,7 +920,7 @@
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
             
             try {
-                // MODEL FIX: gemini-2.5-flash-preview-09-2025 kullanılıyor (EN GÜNCEL VE ÇALIŞAN)
+                // MODEL FIX: AI_MODEL sabiti kullanılıyor
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
@@ -1002,7 +1035,7 @@
             
             if (document.activeElement === editor || document.activeElement === title) {
                 document.activeElement.blur();
-                showToast("Klavye kapatıldı ⌨️", "success");
+                // Butonu kapatma işlemini blur event'i halledecek
             }
         }
     </script>
@@ -1021,6 +1054,8 @@
         .font-lora { font-family: 'Lora', serif; }
         .font-oswald { font-family: 'Oswald', sans-serif; }
         .font-roboto { font-family: 'Roboto Mono', monospace; }
+        .font-pacifico { font-family: 'Pacifico', cursive; }
+        .font-comfortaa { font-family: 'Comfortaa', cursive; }
 
         .note-card {
             transition: transform 0.2s, box-shadow 0.2s;
@@ -1062,7 +1097,10 @@
         body.stealth-mode #stealth-overlay { display: flex; }
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Floating Menu (Sihirli Menü) */
         #floating-menu { position: fixed; z-index: 100; transform: translate(-50%, -100%); }
+        
         #modal-panel {
             display: flex;
             flex-direction: column;
@@ -1082,21 +1120,21 @@
             flex-shrink: 0; 
             box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
         }
-        /* Renk Paleti Satırı (Toolbar Üstü - Sabit Görünüm) */
-        .palette-row {
-            background-color: #f9fafb;
-            border-top: 1px solid #e5e7eb;
-            overflow-x: auto;
-            white-space: nowrap;
-            padding: 8px 12px;
+        /* KLAVYE ÜSTÜ YAPIŞKAN BAR (STICKY BAR) */
+        #sticky-keyboard-bar {
+            position: fixed;
+            bottom: 0; /* Klavye açıldığında yukarı itilecek */
+            left: 0;
+            right: 0;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 8px;
+            z-index: 9999; /* En üstte */
             display: flex;
             align-items: center;
-            /* Scrollbar gizleme */
-            -ms-overflow-style: none;  /* IE and Edge */
-            scrollbar-width: none;  /* Firefox */
-        }
-        .palette-row::-webkit-scrollbar {
-            display: none;
+            justify-content: space-between;
+            box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.1);
+            transition: transform 0.2s, opacity 0.2s;
         }
 
         /* Screenshot Fix: Absolute Overlay + Auto Height */
@@ -1114,10 +1152,10 @@
             z-index: 99999;
         }
         #modal-panel.screenshot-mode .bottom-toolbar-container,
-        #modal-panel.screenshot-mode .palette-row,
+        #modal-panel.screenshot-mode #sticky-keyboard-bar,
         #modal-panel.screenshot-mode #modal-cats,
         #modal-panel.screenshot-mode .modal-header-buttons,
-        #modal-panel.screenshot-mode #keyboard-dismiss-btn {
+        #modal-panel.screenshot-mode #word-count-display {
             display: none !important;
         }
         #modal-panel.screenshot-mode .modal-header {
@@ -1141,28 +1179,6 @@
             overflow-y: auto !important; 
         }
         
-        /* KLAVYE KAPATMA BUTONU (Floating - OKEY TUŞU) */
-        #keyboard-dismiss-btn {
-            position: absolute;
-            bottom: 20px; 
-            right: 20px;
-            z-index: 60;
-            background-color: #22c55e; /* Yeşil */
-            color: white;
-            border: 2px solid #16a34a;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-        }
-        #keyboard-dismiss-btn:active {
-            transform: scale(0.90);
-            background-color: #15803d;
-        }
     </style>
 </head>
 <body class="h-screen flex flex-col text-gray-800 bg-slate-50 selection:bg-indigo-100 selection:text-indigo-900">
@@ -1236,6 +1252,8 @@
         <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#16a34a')" class="w-6 h-6 rounded-full bg-green-600 border border-gray-200"></button>
         <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#ea580c')" class="w-6 h-6 rounded-full bg-orange-600 border border-gray-200"></button>
     </div>
+    
+    <!-- YOUTUBE ASİSTANI MODAL (DÜZELTİLMİŞ VERSİYON) -->
     <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
             <div class="flex justify-between items-center mb-4">
@@ -1270,6 +1288,8 @@
             </button>
         </div>
     </div>
+    
+    <!-- NOT MODALI (Tam Ekran) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
         <div class="absolute inset-0 md:inset-x-0 md:bottom-0 md:top-6 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-3xl bg-white md:rounded-t-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 translate-y-full" id="modal-panel">
@@ -1280,6 +1300,8 @@
                     <button onclick="runAI('generate_title')" class="absolute right-0 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-indigo-600 p-1 modal-header-buttons" title="Otomatik Başlık"><i data-lucide="wand-2" class="w-4 h-4"></i></button>
                 </div>
                 <div class="flex gap-2 items-center modal-header-buttons">
+                    <!-- Kelime Sayacı (YENİ) -->
+                    <span id="word-count-display" class="text-[10px] text-gray-400 font-mono hidden sm:block mr-2">0 Kelime</span>
                     <button onclick="toggleScreenshotMode()" class="text-gray-500 hover:bg-gray-100 p-2 rounded-full transition-colors" title="Ekran Görüntüsü Modu (Gizle)"><i data-lucide="camera" class="w-5 h-5"></i></button>
                     <button id="btn-delete" class="hidden text-red-500 hover:bg-red-50 p-2 rounded-full transition-colors" title="Sil"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
                     <button onclick="saveCurrentNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg active:scale-95 transition-transform">Kaydet</button>
@@ -1292,29 +1314,37 @@
                     <div class="loader mb-3"></div>
                     <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
                 </div>
-                
-                <!-- KLAVYE KAPATMA BUTONU (Floating - OKEY TUŞU) -->
-                <button id="keyboard-dismiss-btn" onmousedown="event.preventDefault()" onclick="toggleKeyboard()" class="hidden translate-y-20 opacity-0 transform transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105" title="Klavyeyi Kapat (Tamam)">
-                    <i data-lucide="check" class="w-8 h-8"></i>
-                </button>
             </div>
             
-            <!-- AYRI RENK PALETİ SATIRI (Toolbar Üstü) -->
-            <div class="palette-row" id="color-scroll-area">
-                <!-- JS ile dolacak -->
+            <!-- KLAVYE ÜSTÜ SABİT BAR (STICKY TOOLBAR) -->
+            <div id="sticky-keyboard-bar" class="translate-y-full opacity-0 pointer-events-none transition-all duration-200">
+                <!-- Buraya dinamik içerik gelecek (Renkler + Klavye Kapatma) -->
+                <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1" id="sticky-palette-inner">
+                    <!-- JS ile dolacak -->
+                </div>
+                <button onmousedown="event.preventDefault()" onclick="toggleKeyboard()" class="ml-2 p-2 bg-green-500 text-white rounded-lg shadow-md shrink-0 flex items-center gap-1 font-bold text-xs active:scale-95 transition-transform">
+                    <i data-lucide="check" class="w-4 h-4"></i> Tamam
+                </button>
             </div>
 
+            <!-- ALT SABİT BAR (Normal) -->
             <div class="bottom-toolbar-container">
+                <div id="color-palette" class="palette-container">
+                     <!-- JS ile dolacak -->
+                </div>
+                
                 <div class="p-3">
                     <div class="flex flex-col gap-3 max-w-lg mx-auto">
                         <div class="flex justify-between items-center w-full px-1">
-                            <div class="flex gap-1 overflow-x-auto no-scrollbar max-w-[50%]">
+                            <div class="flex gap-1 overflow-x-auto no-scrollbar max-w-[60%]">
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">El</button>
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Kitap</button>
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-roboto')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-roboto text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Daktilo</button>
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-lora')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-lora text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Şık</button>
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-oswald')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-oswald text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Modern</button>
                                 <button onmousedown="event.preventDefault()" onclick="setFont('font-caveat')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-caveat text-sm border border-transparent hover:border-gray-200 whitespace-nowrap">İnci</button>
+                                <button onmousedown="event.preventDefault()" onclick="setFont('font-pacifico')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-pacifico text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Retro</button>
+                                <button onmousedown="event.preventDefault()" onclick="setFont('font-comfortaa')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-comfortaa text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Yuvarlak</button>
                             </div>
                             <div class="flex gap-3 shrink-0">
                                 <button onmousedown="event.preventDefault()" onclick="toggleZenMode()" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors" title="Zen Modu"><i data-lucide="maximize" class="w-5 h-5"></i></button>
@@ -1438,5 +1468,3 @@
     <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[90] space-y-2 pointer-events-none"></div>
 </body>
 </html>
-
-
