@@ -15,11 +15,16 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v44'; // V44 - Akıllı Migration, Direkt Renk Paleti, Klavye Fix
+        const CURRENT_KEY = 'baris_final_notes_v45'; // V45 - Font Menüsü, Şelale Renkler, Derin Tarama
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
-        
-        // --- YAPAY ZEKA MODELİ (KORUNDU) ---
         const AI_MODEL = "gemini-2.5-flash-preview-09-2025";
+       
+        // Tüm eski versiyon anahtarları (Veri Kurtarma için)
+        const LEGACY_KEYS = [
+            'baris_final_notes_v35', 'baris_final_notes_v36', 'baris_final_notes_v37', 'baris_final_notes_v38',
+            'baris_final_notes_v39', 'baris_final_notes_v40', 'baris_final_notes_v41', 'baris_final_notes_v42',
+            'baris_final_notes_v43', 'baris_final_notes_v44'
+        ];
        
         let notes = [];
         let currentFilter = 'all';
@@ -31,30 +36,38 @@
         let currentCat = 'guncel';
         let isZenMode = false;
         let isHighlightMode = false; 
-        let isColorGridMode = false; 
         
+        const CATEGORY_COLORS = {
+            'tarih': 'text-red-600 border-red-200 bg-red-50',
+            'dini': 'text-green-600 border-green-200 bg-green-50',
+            'siyasi': 'text-blue-600 border-blue-200 bg-blue-50',
+            'egitim': 'text-yellow-600 border-yellow-200 bg-yellow-50',
+            'guncel': 'text-cyan-600 border-cyan-200 bg-cyan-50',
+            'is': 'text-slate-600 border-slate-200 bg-slate-50',
+            'kisisel': 'text-fuchsia-600 border-fuchsia-200 bg-fuchsia-50',
+            'diger': 'text-gray-600 border-gray-200 bg-gray-50'
+        };
+
         const CATEGORIES = {
             'tarih': 'Tarih', 'dini': 'Dini', 'siyasi': 'Siyasi',
             'egitim': 'Eğitim', 'guncel': 'Güncel', 'is': 'İş',
             'kisisel': 'Kişisel', 'diger': 'Diğer'
         };
 
-        // DEVASA RENK PALETİ
+        // RENK PALETİ
         const COLORS = [
-            '#000000', '#374151', '#4b5563', '#6b7280', '#9ca3af', '#d1d5db', // Griler
-            '#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171', '#fca5a5', // Kırmızılar
-            '#7c2d12', '#9a3412', '#c2410c', '#ea580c', '#f97316', '#fb923c', '#fdba74', // Turuncular
-            '#713f12', '#854d0e', '#a16207', '#ca8a04', '#eab308', '#facc15', '#fde047', // Sarılar
-            '#365314', '#4d7c0f', '#65a30d', '#84cc16', '#a3e635', '#bef264', '#d9f99d', // Lime
-            '#14532d', '#15803d', '#16a34a', '#22c55e', '#4ade80', '#86efac', '#bbf7d0', // Yeşiller
-            '#134e4a', '#0f766e', '#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', // Turkuaz
-            '#164e63', '#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', '#a5f3fc', // Cyan
-            '#1e3a8a', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', // Maviler
-            '#312e81', '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', // İndigo
-            '#4c1d95', '#6d28d9', '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', // Morlar
-            '#581c87', '#7e22ce', '#9333ea', '#a855f7', '#c084fc', '#d8b4fe', '#e9d5ff', // Purple
-            '#831843', '#be185d', '#db2777', '#ec4899', '#f472b6', '#fbcfe8', '#fce7f3', // Pembeler
-            '#881337', '#be123c', '#e11d48', '#f43f5e', '#fb7185', '#fda4af', '#ffe4e6'  // Gül
+            '#000000', '#374151', '#4b5563', '#6b7280', 
+            '#dc2626', '#ef4444', '#f87171', '#fca5a5', 
+            '#ea580c', '#f97316', '#fb923c', '#fdba74', 
+            '#ca8a04', '#eab308', '#facc15', '#fde047', 
+            '#16a34a', '#22c55e', '#4ade80', '#86efac', 
+            '#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', 
+            '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', 
+            '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', 
+            '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', 
+            '#9333ea', '#a855f7', '#c084fc', '#d8b4fe', 
+            '#db2777', '#ec4899', '#f472b6', '#fbcfe8', 
+            '#e11d48', '#f43f5e', '#fb7185', '#fda4af'  
         ];
         
         const DEFAULT_TEXT_COLOR = '#374151'; 
@@ -64,10 +77,7 @@
             performUltimateMigration();
             loadNotes();
             setupVoice();
-            renderColorPalette();
-            // Klavye üstü paleti de render et
-            renderStickyPalette();
-            
+            renderColorPalette(); // Yüzen palet için
             document.execCommand('styleWithCSS', false, true);
             
             if (window.lucide) lucide.createIcons();
@@ -77,7 +87,6 @@
             
             // KLAVYE YÖNETİMİ & DOKUNMATİK
             const handleInteraction = (e) => {
-                // Dokunma anında biraz daha uzun gecikme (mobil klavye animasyonu için)
                 setTimeout(() => {
                     checkSelection();
                     updateWordCount();
@@ -103,18 +112,12 @@
                 el.addEventListener('touchend', handleInteraction); 
                 el.addEventListener('input', handleInteraction);
                 
-                // Klavye açılınca sticky bar'ı göster
-                el.addEventListener('focus', () => {
-                    toggleStickyBar(true);
-                    toggleKeyboardBtn(true);
-                });
+                el.addEventListener('focus', () => toggleKeyboardBtn(true));
                 el.addEventListener('blur', () => {
                     setTimeout(() => {
-                        // Eğer odak hala editörlerde veya araçlardaysa kapatma
                         if (!document.activeElement.closest('.sticky-tools') && 
                             document.activeElement.id !== 'note-content' && 
                             document.activeElement.id !== 'note-title') {
-                            toggleStickyBar(false);
                             toggleKeyboardBtn(false);
                         }
                     }, 200);
@@ -124,17 +127,6 @@
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('gemini-key').value = key;
         });
-
-        const toggleStickyBar = (show) => {
-            const bar = document.getElementById('sticky-keyboard-bar');
-            if(show) {
-                bar.classList.remove('translate-y-full', 'opacity-0', 'pointer-events-none');
-                bar.classList.add('visible');
-            } else {
-                bar.classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
-                bar.classList.remove('visible');
-            }
-        };
 
         // KELİME & KARAKTER SAYACI
         function updateWordCount() {
@@ -146,171 +138,118 @@
 
         function toggleHighlightMode(mode) {
             isHighlightMode = mode;
-            // Tüm butonları güncelle (Sticky + Bottom)
-            const updateUI = (prefix) => {
-                const textBtn = document.getElementById(`${prefix}btn-mode-text`);
-                const highlightBtn = document.getElementById(`${prefix}btn-mode-highlight`);
-                if(!textBtn || !highlightBtn) return;
-
-                if (mode) {
-                    textBtn.classList.remove('bg-gray-800', 'text-white');
-                    textBtn.classList.add('bg-white', 'text-gray-600');
-                    highlightBtn.classList.add('bg-yellow-400', 'text-white', 'border-yellow-500');
-                    highlightBtn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
-                } else {
-                    textBtn.classList.add('bg-gray-800', 'text-white');
-                    textBtn.classList.remove('bg-white', 'text-gray-600');
-                    highlightBtn.classList.remove('bg-yellow-400', 'text-white', 'border-yellow-500');
-                    highlightBtn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
-                }
-            };
-            
-            updateUI(''); // Alt toolbar
-            updateUI('sticky-'); // Klavye üstü toolbar
-            
             showToast(mode ? "Fosforlu Kalem Modu 🖍️" : "Yazı Rengi Modu 🅰️", "success");
+            // Yüzen menüdeki iconu güncelle
+            const icon = document.getElementById('float-highlight-icon');
+            if(icon) {
+                 // Re-render palette to update state visualization if needed
+                 renderColorPalette();
+            }
         }
+        
+        // ŞELALE RENK PALETİ (Vertical Grid in Floating Menu)
+        function renderColorPalette() {
+            const container = document.getElementById('floating-colors-grid');
+            if (!container) return;
 
-        function toggleColorGrid() {
-            isColorGridMode = !isColorGridMode;
-            renderColorPalette();
-        }
-
-        // HTML Şablon Oluşturucu
-        function createPaletteHTML(prefix = '') {
             let html = `
-                <!-- Mod Seçici -->
-                <div class="flex gap-1 shrink-0 mr-2 bg-gray-100 p-1 rounded-full items-center justify-center sticky-tools">
-                    <button id="${prefix}btn-mode-text" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(false)" class="w-8 h-8 rounded-full ${!isHighlightMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-600'} flex items-center justify-center transition-all shadow-sm">
-                        <span class="font-serif font-bold text-lg">A</span>
+                <!-- Üst Kontroller -->
+                <div class="col-span-4 flex justify-between items-center mb-2 pb-2 border-b border-gray-100">
+                    <button onmousedown="event.preventDefault()" onclick="toggleHighlightMode(!isHighlightMode)" class="p-1 rounded-lg ${isHighlightMode ? 'bg-yellow-100 text-yellow-600' : 'bg-gray-100 text-gray-600'} text-xs font-bold flex items-center gap-1 transition-colors">
+                        <i data-lucide="${isHighlightMode ? 'highlighter' : 'type'}" class="w-3 h-3"></i> ${isHighlightMode ? 'Fosforlu' : 'Yazı'}
                     </button>
-                    <button id="${prefix}btn-mode-highlight" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(true)" class="w-8 h-8 rounded-full ${isHighlightMode ? 'bg-yellow-400 text-white border-yellow-500' : 'bg-white text-gray-600 border-gray-200'} flex items-center justify-center transition-all border">
-                        <i data-lucide="highlighter" class="w-4 h-4"></i>
-                    </button>
-                </div>
-                <!-- Sıfırla -->
-                <div class="relative group shrink-0 sticky-tools" title="Rengi Sıfırla">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="resetColor()" class="w-9 h-9 rounded-full bg-white border border-gray-300 shadow-sm flex items-center justify-center transform active:scale-90 transition-transform">
-                        <i data-lucide="eraser" class="w-4 h-4 text-gray-500"></i>
+                    <button onmousedown="event.preventDefault()" onclick="resetColor()" class="p-1 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors" title="Sıfırla">
+                        <i data-lucide="eraser" class="w-3 h-3"></i>
                     </button>
                 </div>
-                <div class="w-px h-6 bg-gray-300 mx-2 shrink-0 rounded-full"></div>
             `;
             
             COLORS.forEach(color => {
                 html += `
                     <button onmousedown="event.preventDefault()" onclick="applyColor('${color}')" 
                             ontouchstart="event.preventDefault(); applyColor('${color}')"
-                            class="w-9 h-9 rounded-full border-2 border-white shadow-sm hover:scale-110 active:scale-90 transition-transform shrink-0 sticky-tools" 
+                            class="w-8 h-8 rounded-full border border-gray-200 shadow-sm transition-transform active:scale-90" 
                             style="background-color: ${color};" 
                             title="${color}"></button>
                 `;
             });
+
+             // Özel Renk
              html += `
-                <div class="relative group shrink-0 ml-1 sticky-tools">
-                    <input type="color" class="absolute inset-0 opacity-0 w-9 h-9 cursor-pointer" onchange="applyColor(this.value)">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-9 h-9 rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
-                        <i data-lucide="plus" class="w-4 h-4 text-white"></i>
+                <div class="relative group w-8 h-8">
+                    <input type="color" class="absolute inset-0 opacity-0 cursor-pointer" onchange="applyColor(this.value)">
+                    <button class="w-full h-full rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 border border-white shadow-sm flex items-center justify-center">
+                        <i data-lucide="plus" class="w-3 h-3 text-white"></i>
                     </button>
                 </div>
             `;
-            return html;
-        }
-
-        function renderColorPalette() {
-            const container = document.getElementById('color-palette'); 
-            if (!container) return;
-
-            if (isColorGridMode) {
-                container.classList.remove('flex', 'overflow-x-auto', 'no-scrollbar', 'items-center');
-                container.classList.add('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
-            } else {
-                container.classList.add('flex', 'overflow-x-auto', 'no-scrollbar', 'items-center');
-                container.classList.remove('grid', 'grid-cols-8', 'gap-2', 'h-40', 'overflow-y-auto');
-            }
-            container.innerHTML = createPaletteHTML();
+            
+            container.innerHTML = html;
             if (window.lucide) lucide.createIcons();
         }
 
-        // KLAVYE ÜSTÜ YAPIŞKAN PALET
-        function renderStickyPalette() {
-            const container = document.getElementById('sticky-palette-inner');
-            if(!container) return;
-            container.innerHTML = createPaletteHTML('sticky-');
-            if (window.lucide) lucide.createIcons();
-        }
-
-        // --- GELİŞMİŞ MIGRATION (Eski Notları Kurtarma) ---
-        function performUltimateMigration() {
+        // --- GELİŞMİŞ MIGRATION (DERİN TARAMA) ---
+        function performUltimateMigration(force = false) {
             let allNotes = [];
             const existingIds = new Set();
-
-            // 1. Önce en güncel veriyi al (varsa)
+            
+            // Mevcut veriyi al
             try {
                 const currentData = localStorage.getItem(CURRENT_KEY);
                 if (currentData) {
-                    const parsed = JSON.parse(currentData);
-                    parsed.forEach(n => {
-                        allNotes.push(n);
-                        existingIds.add(n.id);
-                    });
+                    JSON.parse(currentData).forEach(n => { allNotes.push(n); existingIds.add(n.id); });
                 }
-            } catch (e) { console.log("Güncel veri okuma hatası"); }
+            } catch(e) {}
 
-            // 2. Tüm localStorage anahtarlarını tara (Daha kapsayıcı yöntem)
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                // "baris_final_notes" ile başlayan TÜM anahtarları kontrol et
-                if (key.startsWith('baris_final_notes')) {
-                    try {
-                        const oldData = localStorage.getItem(key);
-                        if (oldData) {
-                            const parsed = JSON.parse(oldData);
-                            if (Array.isArray(parsed)) {
-                                parsed.forEach(note => {
+            // Zorla tarama veya ilk açılış
+            if (force || allNotes.length === 0) {
+                // Tüm localStorage'ı tara
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('baris_final_notes') && key !== CURRENT_KEY) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(key));
+                            if (Array.isArray(data)) {
+                                data.forEach(note => {
                                     if (!existingIds.has(note.id)) {
                                         allNotes.push(note);
                                         existingIds.add(note.id);
                                     }
                                 });
                             }
-                        }
-                    } catch (e) { console.error("Veri kurtarma hatası:", key); }
+                        } catch (e) { console.error("Bad data in " + key); }
+                    }
                 }
+                // Universal DB check
+                try {
+                    const uni = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
+                    uni.forEach(n => { if(!existingIds.has(n.id)) { allNotes.push(n); existingIds.add(n.id); }});
+                } catch(e){}
             }
-            
-            // Eğer evrensel DB varsa oradan da bak
-            try {
-                const uniData = localStorage.getItem(UNIVERSAL_KEY);
-                if(uniData) {
-                     const parsed = JSON.parse(uniData);
-                     parsed.forEach(note => {
-                        if (!existingIds.has(note.id)) {
-                            allNotes.push(note);
-                            existingIds.add(note.id);
-                        }
-                     });
-                }
-            } catch(e) {}
 
             if (allNotes.length > 0) {
-                // Hepsini yeni anahtara kaydet
-                localStorage.setItem(UNIVERSAL_KEY, JSON.stringify(allNotes));
-                localStorage.setItem(CURRENT_KEY, JSON.stringify(allNotes));
+                notes = allNotes;
+                saveToDisk();
+                if(force) showToast(`${allNotes.length} not kurtarıldı/yüklendi!`, "success");
             }
+        }
+        
+        function manualRecovery() {
+            performUltimateMigration(true);
+            renderNotes();
+            toggleSettings();
         }
 
         // --- TEMEL FONKSİYONLAR ---
         function loadNotes() {
-            let raw = localStorage.getItem(UNIVERSAL_KEY);
-            if (!raw) raw = localStorage.getItem(CURRENT_KEY);
+            let raw = localStorage.getItem(CURRENT_KEY);
             if (raw) { try { notes = JSON.parse(raw); } catch (e) { notes = []; } } else { notes = []; }
             renderNotes();
         }
         function saveToDisk() {
             const data = JSON.stringify(notes);
-            localStorage.setItem(UNIVERSAL_KEY, data);
             localStorage.setItem(CURRENT_KEY, data);
+            localStorage.setItem(UNIVERSAL_KEY, data); // Yedek olarak universal'a da at
             renderNotes();
         }
         // --- KOPYALAMA ---
@@ -336,13 +275,11 @@
             const titleDiv = document.getElementById('note-title');
             const titleHTML = titleDiv.innerHTML;
             const titleText = titleDiv.innerText.trim();
-            
             const contentHTML = document.getElementById('note-content').innerHTML;
             const contentText = document.getElementById('note-content').innerText.trim();
             
             if (!titleText && !contentText) { showToast("Boş not kaydedilemez!", "error"); return; }
             const timestamp = Date.now();
-            
             const finalTitle = (titleText) ? titleHTML : '';
 
             if (currentNoteId) {
@@ -403,19 +340,11 @@
                 const date = new Date(note.updatedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
                 const catClass = `cat-${note.category || 'diger'}`;
                 const fontClass = note.font || 'font-hand';
-                
-                // Kategori Rengi (Tailwind Class olarak)
-                let catStyle = "";
-                if(CATEGORY_COLORS[note.category]) {
-                    catStyle = CATEGORY_COLORS[note.category];
-                } else {
-                    catStyle = CATEGORY_COLORS['diger'];
-                }
+                const catTextColor = CATEGORY_COLORS[note.category] || CATEGORY_COLORS['diger'];
 
                 const card = document.createElement('div');
                 card.className = `note-card ${catClass} flex flex-col h-60 bg-white group animate-fade-in relative`;
                 card.onclick = (e) => { if (window.getSelection().toString().length > 0) return; openNote(note.id); };
-                
                 const displayTitle = note.title || 'Başlıksız';
 
                 card.innerHTML = `
@@ -431,7 +360,7 @@
                             <div class="text-sm opacity-90 ${fontClass} text-gray-800 break-words">${note.content}</div>
                         </div>
                         <div class="pt-3 mt-2 border-t border-black/5 flex justify-between items-end pointer-events-none">
-                            <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded tracking-wide border ${catStyle}">${CATEGORIES[note.category]}</span>
+                            <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded tracking-wide border ${catTextColor}">${CATEGORIES[note.category]}</span>
                             <span class="text-xs opacity-50 font-medium">${date}</span>
                         </div>
                     </div>
@@ -458,10 +387,8 @@
             const note = notes.find(n => n.id === id);
             if (!note) return;
             currentNoteId = id;
-            
             const titleEl = document.getElementById('note-title');
             titleEl.innerHTML = note.title; 
-
             document.getElementById('note-content').innerHTML = note.content;
             document.getElementById('btn-delete').classList.remove('hidden');
             document.getElementById('btn-delete').onclick = function() { initiateDelete(id); };
@@ -486,7 +413,7 @@
             document.getElementById('modal-panel').classList.add('translate-y-full');
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('yt-modal').classList.add('hidden');
-            document.getElementById('sticky-keyboard-bar').classList.add('translate-y-full', 'opacity-0', 'pointer-events-none');
+            document.getElementById('font-menu').classList.add('hidden');
             // Butonu da gizle
             document.getElementById('keyboard-dismiss-btn').classList.add('hidden');
             exitZenMode();
@@ -512,15 +439,19 @@
         function setFont(fontClass) {
             currentFont = fontClass;
             const editor = document.getElementById('note-content');
-            // Mevcut font classlarını temizle
             const classes = editor.className.split(' ').filter(c => !c.startsWith('font-')).join(' ');
             editor.className = `${classes} ${fontClass}`;
+            document.getElementById('font-menu').classList.add('hidden'); // Menüyü kapat
         }
+        function toggleFontMenu() {
+            const menu = document.getElementById('font-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // --- GELİŞMİŞ RENK UYGULAMA ---
         function applyColor(color) {
             document.execCommand('styleWithCSS', false, true);
             const selection = window.getSelection();
-            
-            // Seçim yoksa kelimeyi otomatik seç
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if (wordRange) {
@@ -536,13 +467,11 @@
             }
             selection.removeAllRanges();
             document.getElementById('floating-menu').classList.add('hidden');
-            document.getElementById('floating-colors').classList.add('hidden');
         }
 
         function resetColor() {
             document.execCommand('styleWithCSS', false, true);
             const selection = window.getSelection();
-            
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if (wordRange) {
@@ -552,16 +481,10 @@
             }
             document.execCommand('removeFormat', false, null); 
             document.execCommand('foreColor', false, DEFAULT_TEXT_COLOR); 
-            // selection.removeAllRanges();
+            selection.removeAllRanges();
             document.getElementById('floating-menu').classList.add('hidden');
-            document.getElementById('floating-colors').classList.add('hidden');
         }
 
-        function changeFontSize(size) {
-            document.execCommand('styleWithCSS', false, true);
-            document.execCommand('fontSize', false, size);
-        }
-        
         function getWordAtCaret() {
             const sel = window.getSelection();
             if (sel.rangeCount === 0) return null;
@@ -574,7 +497,6 @@
             const text = node.textContent;
             const offset = range.startOffset;
 
-            // Kelimenin başını ve sonunu bul
             let start = offset;
             while (start > 0 && /\S/.test(text[start - 1])) start--;
             let end = offset;
@@ -588,16 +510,12 @@
             return newRange;
         }
         
-        function applyFloatingColor(color) { applyColor(color); }
         function undo() { document.execCommand('undo'); }
         function redo() { document.execCommand('redo'); }
         
         // KLAVYE KAPATMA (OKEY) FONKSİYONU
         function toggleKeyboard() {
-            const editor = document.getElementById('note-content');
-            const title = document.getElementById('note-title');
-            
-            if (document.activeElement === editor || document.activeElement === title) {
+            if (document.activeElement) {
                 document.activeElement.blur();
                 showToast("Klavye kapatıldı ✅", "success");
             }
@@ -608,7 +526,7 @@
         // --- SİHİRLİ SEÇİM (Smart Touch) - DİREKT RENK MENÜSÜ ---
         function checkSelection() {
             const selection = window.getSelection();
-            const floatingColors = document.getElementById('floating-colors');
+            const floatingMenu = document.getElementById('floating-menu');
             
             let rect;
             let show = false;
@@ -628,21 +546,19 @@
             }
 
             if (show && rect) {
-                let top = rect.top - 60;
+                let top = rect.top - 210; // Daha yukarı al (şelale menü sığsın)
                 if (top < 10) top = rect.bottom + 10; 
                 
-                // İSTEK ÜZERİNE DİREKT RENKLERİ GÖSTER
-                floatingColors.style.top = `${top}px`;
-                floatingColors.style.left = `${rect.left + (rect.width / 2) - 100}px`; 
-                floatingColors.classList.remove('hidden');
+                // İSTEK ÜZERİNE: Yüzen menüyü aç (Renkler direkt içinde)
+                floatingMenu.style.top = `${top}px`;
+                floatingMenu.style.left = `${Math.min(Math.max(10, rect.left + (rect.width / 2) - 100), window.innerWidth - 210)}px`; // Ekrandan taşmasın
+                floatingMenu.classList.remove('hidden');
                 
                 // Diğer menüleri gizle
-                document.getElementById('floating-menu').classList.add('hidden');
                 document.getElementById('magic-options').classList.add('hidden');
                 
             } else {
-                floatingColors.classList.add('hidden');
-                document.getElementById('floating-menu').classList.add('hidden');
+                floatingMenu.classList.add('hidden');
                 document.getElementById('magic-options').classList.add('hidden');
             }
         }
@@ -650,14 +566,7 @@
         function showMagicOptions() {
             document.getElementById('floating-menu').classList.add('hidden');
             const menu = document.getElementById('magic-options');
-            menu.style.top = document.getElementById('floating-menu').style.top;
-            menu.style.left = document.getElementById('floating-menu').style.left;
-            menu.classList.remove('hidden');
-        }
-
-        function showFloatingColors() {
-            document.getElementById('floating-menu').classList.add('hidden');
-            const menu = document.getElementById('floating-colors');
+            // Son bilinen pozisyonda aç
             menu.style.top = document.getElementById('floating-menu').style.top;
             menu.style.left = document.getElementById('floating-menu').style.left;
             menu.classList.remove('hidden');
@@ -665,7 +574,6 @@
 
         function applyMagicFix(type) {
             const selection = window.getSelection();
-            // Otomatik kelime seçimi
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if(wordRange) {
@@ -684,6 +592,12 @@
                 prompt = `${persona} Bu ifadeyi daha zengin, edebi veya etkileyici hale getir. Kelime dağarcığını güçlendir. Sadece yeni metni ver. Metin: ${text}`;
             } else if (type === 'formal') {
                 prompt = `${persona} Bu ifadeyi daha resmi, kurumsal veya akademik bir dile çevir. Sadece yeni metni ver. Metin: ${text}`;
+            } else if (type === 'translate') {
+                prompt = `Bu metni İngilizceye çevir. Sadece çeviriyi ver. Metin: ${text}`;
+            } else if (type === 'explain') {
+                prompt = `Bu kavramı veya cümleyi kısaca (1-2 cümle) açıkla. Nedir? Metin: ${text}`;
+            } else if (type === 'funny') {
+                prompt = `Bu ifadeyi esprili, komik bir dille yeniden yaz. Metin: ${text}`;
             }
             runMagicAI(prompt);
         }
@@ -693,7 +607,6 @@
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
             showToast("Sihir yapılıyor...", "success");
             try {
-                // MODEL FIX
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
@@ -715,11 +628,9 @@
             isZenMode = !isZenMode;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
-            const palette = document.getElementById('color-palette');
             if (isZenMode) {
                 modal.classList.add('!inset-0', '!max-w-none', '!rounded-none');
                 if(toolbar) toolbar.classList.add('hidden');
-                if(palette) palette.classList.add('hidden');
                 document.getElementById('modal-cats').classList.add('hidden');
                 document.querySelector('.modal-header').classList.add('border-transparent');
                 showToast("Zen Modu", "success");
@@ -729,10 +640,8 @@
             isZenMode = false;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
-            const palette = document.getElementById('color-palette');
             modal.classList.remove('!inset-0', '!max-w-none', '!rounded-none');
             if(toolbar) toolbar.classList.remove('hidden');
-            if(palette) palette.classList.remove('hidden');
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('.modal-header').classList.remove('border-transparent');
         }
@@ -844,7 +753,9 @@
             }
         }
         async function runAI(action, customText = null) {
-            if(action !== 'generate_title' && action !== 'youtube_summary') toggleAiMenu();
+            // İSTEK: TIKLAYINCA KAPANSIN
+            document.getElementById('ai-popup').classList.add('hidden');
+            
             const contentDiv = document.getElementById('note-content');
             const text = customText || contentDiv.innerText;
             if(action !== 'generate_title' && !text.trim()) return showToast("Önce bir şeyler yazın!", "error");
@@ -867,104 +778,41 @@
                 ASLA kendini tanıtma. "Ben Barış hoca..." deme. Doğrudan konuya gir.
                 "Merhaba arkadaşlar", "Bakın burası çok önemli", "Şunu unutmayın" gibi doğal, samimi bir konuşma dili kullan.
             `;
-            if (action === 'generate_title') {
-                prompt = `Bu metni analiz et ve Barış'ın üslubuna uygun, çarpıcı, kısa (maksimum 5 kelime) bir başlık yaz. Sadece başlığı ver. Metin: ${text}`;
-            }
-            else if (action === 'analyze_mood') {
-                prompt = `Bu metnin duygu durumunu analiz et ve bunu TEK BİR EMOJİ ile ifade et. Sadece emojiyi ver. (Örn: 🤔, 😊, 😤). Metin: ${text}`;
-            }
-            else if (action === 'youtube_summary') {
-                prompt = `${persona}
-                Aşağıdaki metin bir YouTube videosunun ham transkriptidir. Metni temizle.
-                Sanki bu videoyu izlemişim ve en can alıcı noktalarını not almışım gibi "Kısa ve Öz" bir özet çıkar.
-                ${multiColorHighlight}
-                Sloganvari ara başlıklar kullan.
-                Metin: ${text}`;
-            }
-            else if (action === 'generate_rubric') {
-                prompt = `Bu metindeki görev/konu için 4 seviyeli (Mükemmel, İyi, Orta, Geliştirilmeli) bir Dereceli Puanlama Anahtarı (Rubrik) hazırla. HTML Tablosu (<table>) formatında ver. Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'generate_hashtags') {
-                prompt = `Bu metin için sosyal medyada (Instagram, Twitter, LinkedIn) etkileşimi artıracak, konuyla ilgili en popüler 15 adet Türkçe Hashtag (#) öner. Liste olarak ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_analogy') {
-                prompt = `${persona} Bu metindeki ana konuyu veya en karmaşık kavramı, günlük hayattan herkesin anlayabileceği basit ve akılda kalıcı bir ANALOJİ (benzetme) kullanarak açıkla. (Örn: Trafik, Futbol, Yemek Yapmak vb.). Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'email_formal') {
-                prompt = `Bu notları, bir yöneticiye, resmi kuruma veya veliye gönderilecek resmi, nazik ve profesyonel bir e-posta taslağına dönüştür. Konu satırı ekle. Başlık: "<h3>📧 E-Posta Taslağı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'generate_references') {
-                prompt = `Bu metindeki bilgileri veya konuyu temel alarak, bu konuda okuma yapılabilecek 3 adet farazi (veya bilinen) kitap/makale kaynağını akademik formatta (APA benzeri) listele. Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`;
-            }
-            else if (action === 'pedagogical_organizer') {
-                 prompt = `${persona} Bu metnin içeriğini analiz et. Bu konuyu öğretmek için pedagojik açıdan EN UYGUN görsel örgütleyiciyi yapay zeka olarak sen SEÇ. Çıktı Formatı (HTML): <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm mb-4"> <h3 class="text-blue-900 font-bold text-lg mb-2 flex items-center gap-2">🎯 Seçilen Yöntem: [Yöntem Adı]</h3> <p class="text-sm text-blue-700 italic mb-4">"Neden bu yöntemi seçtim? Çünkü [Kısa Gerekçe]"</p> <div class="space-y-3 bg-white p-4 rounded-lg border border-gray-100 text-gray-800"> [İçeriği seçilen yönteme göre HTML Tablosu (<table>) veya düzenli Listeler (<ul>/<li>) ile sun] </div> </div> ${multiColorHighlight} Metin: ${text}`;
-            }
-            else if (action === 'iep_goals') {
-                prompt = `${persona} Bu metindeki veya nottaki konuyu/beceriyi baz alarak, özel gereksinimli bir öğrenci için 3 adet "BEP (Bireyselleştirilmiş Eğitim Programı) Hedefi" yaz. Hedefler SMART (Ölçülebilir, Gözlemlenebilir) olsun. HTML formatında ver. Başlık: "<h3>🎯 BEP Hedef Önerileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'adapt_activity') {
-                prompt = `${persona} Bu konuyu/etkinliği "Özel Gereksinimli" veya "Okul Öncesi" bir öğrenci için uyarla (İnklüzyon). Basitleştirme, Görsel Destek, Materyal Uyarlaması ve Yönerge Basitleştirme başlıklarını kullan. HTML formatında ver. Başlık: "<h3>🧩 Etkinlik Uyarlama (İnklüzyon)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'parent_message') {
-                prompt = `${persona} Bu notları baz alarak, öğrencinin velisine gönderilecek nazik, profesyonel ve işbirlikçi bir bilgilendirme mesajı yaz. Gelişimi öv, evde yapılabilecek basit bir öneri ekle. HTML formatında ver. Başlık: "<h3>👨‍👩‍👧 Veli Bilgilendirme Mesajı</h3>". Metin: ${text}`;
-            }
-            else if (action === 'socratic_questions') {
-                prompt = `Bu metindeki konuyu derinleştirmek için öğrencilere sorulabilecek 3 adet "Sokratik Soru" üret. HTML formatında ver. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". Metin: ${text}`;
-            }
-            else if (action === 'summarize_short') {
-                prompt = `${persona} Bu notları benim ağzımdan "Kısa ve Öz" bir şekilde özetle. ${multiColorHighlight} Sanki bir manifesto yazar gibi vurucu ve net olsun. Metin: ${text}`;
-            }
-            else if (action === 'blogify_short') {
-                prompt = `${persona} Web sitem için "Kısa Köşe Yazısı" (Mikro-Blog) oluştur. Max 300 kelime. ${multiColorHighlight} Samimi, akıcı ve emojili olsun. Metin: ${text}`;
-            }
-            else if (action === 'bio_site') {
-                prompt = `${persona} Bu metni veya notları analiz ederek, "Bio Site" (Linktree, Kişisel Web Sitesi vb.) için kullanılabilecek profesyonel ama samimi bir "Hakkımda / Profil" yazısı oluştur. Kendini 3. şahıs değil, 1. şahıs olarak anlat. Emojilerle süsle. HTML paragraf formatında ver. Başlık: "<h3>👤 Bio Site Yazısı (Profil)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'bio_short') {
-                prompt = `Bu metinden yola çıkarak Instagram, Twitter ve Linktree profilleri için 3 farklı alternatifte KISA (max 160 karakter), etkileyici ve emojili biyografi yazısı yaz. Maddeler halinde ver. Başlık: "<h3>📱 Kısa Sosyal Medya Biyografileri</h3>". Metin: ${text}`;
-            }
-            else if (action === 'bio_services') {
-                prompt = `Bu metindeki yetenek, deneyim ve konulardan yola çıkarak, bio sitesine konulacak şık bir 'Neler Yapıyorum?' veya 'Hizmetlerim/Uzmanlıklarım' listesi oluştur. HTML <ul> (Liste) formatında ver. Başlık: "<h3>💼 Neler Yaparım? (Hizmet Listesi)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'bio_slogan') {
-                prompt = `Bu kişinin vizyonunu ve notlardaki felsefesini yansıtan 3 adet kısa, akılda kalıcı ve motive edici SLOGAN (Motto) öner. Tırnak içinde ver. Başlık: "<h3>📢 Kişisel Slogan (Motto)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'social_story') {
-                prompt = `${persona} Bu metindeki durumu veya davranışı baz alarak, otizmli veya özel gereksinimli bir öğrenci için Carol Gray'in 'Sosyal Öykü' (Social Story) formatına uygun bir hikaye yaz. 1. tekil şahıs ("Ben") dilini kullan. Betimleyici ve olumlu cümleler kur. Başlık: "<h3>📘 Sosyal Öykü</h3>". Metin: ${text}`;
-            }
-            else if (action === 'behavior_chart') {
-                prompt = `Bu metindeki konuyu veya öğrencinin ihtiyaçlarını analiz et ve 'Davranış Takip Çizelgesi' oluştur. Haftalık bir tablo (Pazartesi-Cuma) olsun. Başlık: "<h3>📊 Davranış Takip Çizelgesi</h3>". Metin: ${text}`;
-            }
-            else if (action === 'visual_text') {
-                prompt = `${persona} Bu metni zihinsel yetersizliği olan veya okuma güçlüğü çeken bir birey için 'Kolay Okunur' (Easy Read) formatına çevir. Cümleleri kısalt ve basitleştir. HER cümlenin sonuna veya anahtar kelimelerin yanına, anlamı destekleyen emojiler ekle (Sembol desteği). Madde madde git. Başlık: "<h3>👁️ Görselleştirilmiş Metin (Easy Read)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'summarize_long') {
-                prompt = `${persona} Bu notları "Detaylı ve Kapsamlı" bir şekilde özetle. Hiçbir önemli detayı atlama. ${multiColorHighlight} Madde madde, derinlemesine anlat. Başlık: "<h3>📑 Detaylı Özet (Uzun)</h3>". Metin: ${text}`;
-            }
-            else if (action === 'lesson_plan_udl') {
-                prompt = `${persona}
-                Bu metindeki öğrenci profilini (Yaş, Tanı, İlgi Alanları, Güçlü/Zayıf Yönler) analiz et.
-                Bu bilgiler ışığında, konuda geçen hedefi öğretmek için 'Evrensel Tasarım (UDL)' ilkelerine uygun, adım adım bir Ders Planı hazırla.
-                Giriş, Gelişme, Değerlendirme aşamalarını ve materyal uyarlamalarını detaylandır.
-                Başlık: "<h3>🧩 Bireyselleştirilmiş Ders Planı (UDL)</h3>".
-                Metin: ${text}`;
-            }
-            else if (action === 'graphic_organizer_generator') {
-                prompt = `Bu konuyu otizmli veya görsel düşünen bir öğrenciye en iyi şekilde anlatacak pedagojik grafik örgütleyiciyi (Zihin Haritası, Balık Kılçığı, 5N1K, İşlem Basamakları vb.) seç.
-                Bunu bir HTML tablosu veya kutucuklu yapı (div/border) ile görselleştirerek oluştur.
-                Başlık: "<h3>🎨 Görsel Örgütleyici Tasarımı</h3>".
-                Metin: ${text}`;
-            }
-            else if (action === 'extract_tasks') prompt = `Yapılacak işleri çıkar. HTML checklist formatında ver. Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
-            else if (action === 'quiz') prompt = `3 adet çoktan seçmeli soru hazırla. Cevapları gizli (details etiketiyle) olsun. ${multiColorHighlight} HTML formatında. Metin: ${text}`;
-            else if (action === 'eli5') prompt = `${persona} 5 yaşında bir çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
-            else if (action === 'fix') prompt = `${persona} Gramer açısından düzelt. ${multiColorHighlight} Metin: ${text}`;
-            else if (action === 'seo_analysis') prompt = `SEO analizi yap (Title, Desc, Keywords). HTML kutucuk içinde ver. Metin: ${text}`;
-            else if (action === 'image_prompts') prompt = `Bu metin için blog görseli (Thumbnail) promptu yaz (İngilizce). HTML ver. Metin: ${text}`;
-            else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
+            // PROMPT SEÇİMLERİ (MEVCUT LİSTE KORUNDU)
+            if (action === 'generate_title') { prompt = `Bu metni analiz et ve Barış'ın üslubuna uygun, çarpıcı, kısa bir başlık yaz. Sadece başlığı ver. Metin: ${text}`; }
+            else if (action === 'analyze_mood') { prompt = `Bu metnin duygu durumunu analiz et ve bunu TEK BİR EMOJİ ile ifade et. Sadece emojiyi ver. Metin: ${text}`; }
+            else if (action === 'youtube_summary') { prompt = `${persona} Aşağıdaki metin bir YouTube videosunun ham transkriptidir. Temizle ve can alıcı noktaları özetle. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'generate_rubric') { prompt = `4 seviyeli Rubrik hazırla. HTML Tablosu ver. Başlık: "<h3>📊 Değerlendirme Rubriği</h3>". ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'generate_hashtags') { prompt = `Sosyal medya için 15 Türkçe Hashtag öner. Liste ver. Başlık: "<h3>#️⃣ Etiket Önerileri</h3>". Metin: ${text}`; }
+            else if (action === 'generate_analogy') { prompt = `${persona} Konuyu basit bir analoji (benzetme) ile açıkla. Başlık: "<h3>💡 Analoji (Benzetme)</h3>". ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'email_formal') { prompt = `Resmi ve nazik bir e-posta taslağı yaz. Konu satırı ekle. Başlık: "<h3>📧 E-Posta Taslağı</h3>". Metin: ${text}`; }
+            else if (action === 'generate_references') { prompt = `Bu konuda 3 adet kitap/makale kaynağı öner (APA). Başlık: "<h3>📚 Kaynakça Önerisi</h3>". Metin: ${text}`; }
+            else if (action === 'pedagogical_organizer') { prompt = `${persona} Konuyu görselleştirmek için en uygun grafik örgütleyiciyi seç ve HTML ile çiz. Başlık: "<h3>🎨 Görsel Örgütleyici</h3>". Metin: ${text}`; }
+            else if (action === 'iep_goals') { prompt = `${persona} Özel gereksinimli öğrenci için 3 SMART BEP hedefi yaz. Başlık: "<h3>🎯 BEP Hedefleri</h3>". Metin: ${text}`; }
+            else if (action === 'adapt_activity') { prompt = `${persona} Etkinliği özel gereksinimli öğrenci için uyarla. Başlık: "<h3>🧩 Etkinlik Uyarlama</h3>". Metin: ${text}`; }
+            else if (action === 'parent_message') { prompt = `${persona} Veliye gönderilecek nazik bilgilendirme mesajı yaz. Başlık: "<h3>👨‍👩‍👧 Veli Mesajı</h3>". Metin: ${text}`; }
+            else if (action === 'socratic_questions') { prompt = `3 adet Sokratik soru üret. Başlık: "<h3>🤔 Düşündüren Sorular</h3>". Metin: ${text}`; }
+            else if (action === 'summarize_short') { prompt = `${persona} Kısa ve öz özetle. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'blogify_short') { prompt = `${persona} Mikro-Blog yazısı oluştur. ${multiColorHighlight} Metin: ${text}`; }
+            else if (action === 'bio_site') { prompt = `${persona} Bio Site için profil yazısı oluştur. 1. şahıs. Başlık: "<h3>👤 Bio Site Yazısı</h3>". Metin: ${text}`; }
+            else if (action === 'bio_short') { prompt = `Instagram/Twitter için kısa bio alternatifleri yaz. Başlık: "<h3>📱 Kısa Bio</h3>". Metin: ${text}`; }
+            else if (action === 'bio_services') { prompt = `Hizmet/Uzmanlık listesi oluştur. HTML Liste. Başlık: "<h3>💼 Hizmetler</h3>". Metin: ${text}`; }
+            else if (action === 'bio_slogan') { prompt = `Kişisel slogan (motto) önerileri. Başlık: "<h3>📢 Motto</h3>". Metin: ${text}`; }
+            else if (action === 'social_story') { prompt = `${persona} Carol Gray tekniğiyle Sosyal Öykü yaz. Başlık: "<h3>📘 Sosyal Öykü</h3>". Metin: ${text}`; }
+            else if (action === 'behavior_chart') { prompt = `Davranış Takip Çizelgesi oluştur. HTML Tablo. Başlık: "<h3>📊 Davranış Çizelgesi</h3>". Metin: ${text}`; }
+            else if (action === 'visual_text') { prompt = `${persona} Kolay Okunur (Easy Read) formatına çevir, bol emoji kullan. Başlık: "<h3>👁️ Görselleştirilmiş Metin</h3>". Metin: ${text}`; }
+            else if (action === 'summarize_long') { prompt = `${persona} Detaylı ve kapsamlı özetle. Madde madde. ${multiColorHighlight} Başlık: "<h3>📑 Detaylı Özet</h3>". Metin: ${text}`; }
+            else if (action === 'lesson_plan_udl') { prompt = `${persona} UDL ilkelerine göre Bireyselleştirilmiş Ders Planı hazırla. Başlık: "<h3>🧩 UDL Ders Planı</h3>". Metin: ${text}`; }
+            else if (action === 'graphic_organizer_generator') { prompt = `Konu için görsel grafik örgütleyici tasarla (HTML). Başlık: "<h3>🎨 Grafik Örgütleyici</h3>". Metin: ${text}`; }
+            else if (action === 'extract_tasks') prompt = `Yapılacakları çıkar (Checklist). Başlık: "<h3>📝 Yapılacaklar</h3>". Metin: ${text}`;
+            else if (action === 'quiz') prompt = `3 çoktan seçmeli soru hazırla. Cevapları gizle. HTML. ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'eli5') prompt = `${persona} 5 yaşında çocuğa anlatır gibi basitleştir. ${multiColorHighlight} Başlık: "<h3>👶 Basitçe</h3>". Metin: ${text}`;
+            else if (action === 'fix') prompt = `${persona} Gramer düzelt. ${multiColorHighlight} Metin: ${text}`;
+            else if (action === 'seo_analysis') prompt = `SEO analizi yap. HTML kutu. Metin: ${text}`;
+            else if (action === 'image_prompts') prompt = `Görsel (Thumbnail) promptu yaz (İngilizce). HTML. Metin: ${text}`;
+            else if (action === 'whatsapp') prompt = `WhatsApp durumu için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
             
             try {
-                // MODEL FIX: AI_MODEL sabiti kullanılıyor
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
@@ -1142,23 +990,22 @@
         .loader { width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* Floating Menu (Sihirli Menü - İPTAL: Direkt Renkler Geliyor) */
-        #floating-menu { position: fixed; z-index: 100; transform: translate(-50%, -100%); }
-        
-        /* DİREKT RENK PALETİ (Floating Colors) */
-        #floating-colors {
+        /* ŞELALE RENK PALETİ (Floating Menu Replacement) */
+        #floating-colors-grid {
              position: fixed; 
-             z-index: 9999; 
+             z-index: 100; 
              transform: translate(-50%, -100%);
              background: white;
-             padding: 8px;
-             border-radius: 12px;
-             box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+             padding: 10px;
+             border-radius: 16px;
+             box-shadow: 0 15px 30px -5px rgba(0,0,0,0.2);
              border: 1px solid #e2e8f0;
-             display: flex;
-             gap: 4px;
-             overflow-x: auto;
-             max-width: 90vw;
+             display: grid;
+             grid-template-columns: repeat(4, 1fr); /* 4 Sütunlu Izgara */
+             gap: 8px;
+             max-height: 250px;
+             overflow-y: auto;
+             min-width: 180px;
         }
 
         #modal-panel {
@@ -1180,13 +1027,6 @@
             flex-shrink: 0; 
             box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
         }
-        /* Renk Paleti Satırı (Toolbar Üstü - Sabit Görünüm) */
-        .palette-container {
-            background-color: #f9fafb;
-            border-top: 1px solid #e5e7eb;
-            padding: 8px 12px;
-            /* Layout JS ile yönetiliyor */
-        }
 
         /* Screenshot Fix: Absolute Overlay + Auto Height */
         #modal-panel.screenshot-mode {
@@ -1207,7 +1047,8 @@
         #modal-panel.screenshot-mode #modal-cats,
         #modal-panel.screenshot-mode .modal-header-buttons,
         #modal-panel.screenshot-mode #keyboard-dismiss-btn,
-        #modal-panel.screenshot-mode #word-count-display {
+        #modal-panel.screenshot-mode #word-count-display,
+        #modal-panel.screenshot-mode #floating-colors-grid {
             display: none !important;
         }
         #modal-panel.screenshot-mode .modal-header {
@@ -1252,30 +1093,6 @@
         #keyboard-dismiss-btn:active {
             transform: scale(0.90);
             background-color: #15803d;
-        }
-        
-        /* YAPIŞKAN ARAÇ ÇUBUĞU (Klavye üstü) */
-        #sticky-keyboard-bar {
-            position: absolute;
-            bottom: 80px; 
-            left: 0;
-            right: 0;
-            background: rgba(255,255,255,0.98);
-            padding: 8px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            border-top: 1px solid #e2e8f0;
-            z-index: 60;
-            backdrop-filter: blur(8px);
-            transform: translateY(150%);
-            opacity: 0;
-            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.05);
-        }
-        #sticky-keyboard-bar.visible {
-            transform: translateY(0);
-            opacity: 1;
         }
     </style>
 </head>
@@ -1326,26 +1143,64 @@
         <i data-lucide="plus" class="w-8 h-8"></i>
     </button>
     
-    <!-- YÜZEN RENK PALETİ (DİREKT) -->
-    <div id="floating-colors" class="hidden absolute z-[9999] bg-white rounded-xl shadow-2xl border border-gray-100 p-2 animate-fade-in flex gap-2 overflow-x-auto no-scrollbar max-w-[90vw]">
-        <!-- Renkler JS ile buraya gelecek -->
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#374151')" class="w-8 h-8 rounded-full bg-gray-500 border border-gray-200 flex items-center justify-center shrink-0" title="Sıfırla"><i data-lucide="x" class="w-3 h-3 text-white"></i></button>
-        <div class="w-px h-8 bg-gray-200 mx-1 shrink-0"></div>
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#000000')" class="w-8 h-8 rounded-full bg-black border border-gray-200 shrink-0"></button>
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#dc2626')" class="w-8 h-8 rounded-full bg-red-600 border border-gray-200 shrink-0"></button>
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#2563eb')" class="w-8 h-8 rounded-full bg-blue-600 border border-gray-200 shrink-0"></button>
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#16a34a')" class="w-8 h-8 rounded-full bg-green-600 border border-gray-200 shrink-0"></button>
-        <button onmousedown="event.preventDefault()" onclick="applyFloatingColor('#ea580c')" class="w-8 h-8 rounded-full bg-orange-600 border border-gray-200 shrink-0"></button>
-        <button onmousedown="event.preventDefault()" onclick="showMagicOptions()" class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 border border-indigo-200 shrink-0 flex items-center justify-center"><i data-lucide="wand-2" class="w-4 h-4"></i></button>
+    <!-- YENİ ŞELALE RENK PALETİ (Smart Touch) -->
+    <div id="floating-colors-grid" class="hidden animate-fade-in">
+        <!-- JS İLE DOLACAK -->
     </div>
-
-    <!-- AI Alt Menü -->
-    <div id="magic-options" class="hidden absolute z-[9999] bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden flex-col w-40 animate-fade-in mt-2">
+    
+    <!-- GELİŞMİŞ SİHİRLİ MENÜ -->
+    <div id="magic-options" class="hidden absolute z-[60] bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex-col w-48 animate-fade-in mt-2">
+        <div class="bg-gray-50 px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Düzeltme</div>
         <button onclick="applyMagicFix('grammar')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full border-b border-gray-50 flex items-center gap-2"><i data-lucide="check" class="w-3 h-3 text-green-500"></i> Gramer Düzelt</button>
         <button onclick="applyMagicFix('enrich')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full border-b border-gray-50 flex items-center gap-2"><i data-lucide="sparkles" class="w-3 h-3 text-purple-500"></i> Zenginleştir</button>
-        <button onclick="applyMagicFix('formal')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full flex items-center gap-2"><i data-lucide="briefcase" class="w-3 h-3 text-blue-500"></i> Resmileştir</button>
+        <button onclick="applyMagicFix('formal')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full border-b border-gray-50 flex items-center gap-2"><i data-lucide="briefcase" class="w-3 h-3 text-blue-500"></i> Resmileştir</button>
+        
+        <div class="bg-gray-50 px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Ekstra</div>
+        <button onclick="applyMagicFix('translate')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full border-b border-gray-50 flex items-center gap-2"><i data-lucide="languages" class="w-3 h-3 text-orange-500"></i> İngilizceye Çevir</button>
+        <button onclick="applyMagicFix('explain')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full border-b border-gray-50 flex items-center gap-2"><i data-lucide="help-circle" class="w-3 h-3 text-teal-500"></i> Açıkla (Nedir?)</button>
+        <button onclick="applyMagicFix('funny')" class="px-4 py-3 text-xs font-medium text-gray-700 hover:bg-indigo-50 text-left w-full flex items-center gap-2"><i data-lucide="smile" class="w-3 h-3 text-yellow-500"></i> Espri Kat</button>
     </div>
 
+    <!-- FONT MENÜSÜ (Aa Butonuyla Açılır) -->
+    <div id="font-menu" class="hidden absolute bottom-20 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-2xl border border-gray-200 p-2 z-[60] w-64 animate-fade-in grid grid-cols-2 gap-1">
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-hand')" class="p-2 rounded hover:bg-gray-50 text-left font-hand text-sm">El Yazısı</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-serif')" class="p-2 rounded hover:bg-gray-50 text-left font-serif text-sm">Kitap</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-roboto')" class="p-2 rounded hover:bg-gray-50 text-left font-roboto text-sm">Daktilo</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-lora')" class="p-2 rounded hover:bg-gray-50 text-left font-lora text-sm">Şık</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-oswald')" class="p-2 rounded hover:bg-gray-50 text-left font-oswald text-sm">Modern</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-caveat')" class="p-2 rounded hover:bg-gray-50 text-left font-caveat text-lg">İnci</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-pacifico')" class="p-2 rounded hover:bg-gray-50 text-left font-pacifico text-sm">Retro</button>
+         <button onmousedown="event.preventDefault()" onclick="setFont('font-comfortaa')" class="p-2 rounded hover:bg-gray-50 text-left font-comfortaa text-xs">Yuvarlak</button>
+    </div>
+
+    <!-- YOUTUBE ASİSTANI MODAL -->
+    <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold flex items-center text-red-600"><i data-lucide="youtube" class="mr-2"></i> YouTube Asistanı</h3>
+                <button onclick="closeYouTubeMode()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
+                <h4 class="font-bold text-gray-700 text-sm mb-2">🚀 Mobilde Metin Nasıl Alınır?</h4>
+                <div class="flex flex-col gap-3 text-xs text-gray-600">
+                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
+                    <div class="flex gap-2">
+                        <a href="https://youtubetranscript.com/" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
+                        </a>
+                        <a href="https://downsub.com/" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
+                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 2
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <textarea id="yt-transcript" class="w-full h-40 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none resize-none mb-4 font-mono text-gray-600" placeholder="⚠️ Link değil, videonun yazılarını (transkripti) buraya yapıştır..."></textarea>
+            <button onclick="processYouTubeTranscript()" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-lg transition-colors flex justify-center items-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4 text-yellow-300"></i> Barışça Özetle
+            </button>
+        </div>
+    </div>
+    
     <!-- NOT MODALI (Tam Ekran) -->
     <div id="note-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
@@ -1372,37 +1227,24 @@
                     <p class="text-sm font-bold text-indigo-600 animate-pulse">Yapay Zeka Düşünüyor...</p>
                 </div>
                 
-                <!-- KLAVYE ÜSTÜ ARAÇ ÇUBUĞU (YENİ) -->
-                <div id="sticky-keyboard-bar" class="hidden">
-                    <div class="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1" id="sticky-palette-inner">
-                        <!-- JS ile dolacak -->
-                    </div>
-                </div>
-
                 <!-- KLAVYE KAPATMA BUTONU (Floating - OKEY TUŞU - FIX) -->
                 <button id="keyboard-dismiss-btn" onmousedown="event.preventDefault()" onclick="toggleKeyboard()" class="hidden translate-y-20 opacity-0 transform transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105" title="Klavyeyi Kapat (Tamam)">
                     <i data-lucide="check" class="w-8 h-8"></i>
                 </button>
             </div>
             
-            <!-- AYRI RENK PALETİ SATIRI (Toolbar Üstü) -->
-            <div id="color-palette" class="palette-container">
-                <!-- JS ile dolacak -->
-            </div>
-
             <div class="bottom-toolbar-container">
                 <div class="p-3">
                     <div class="flex flex-col gap-3 max-w-lg mx-auto">
                         <div class="flex justify-between items-center w-full px-1">
-                            <div class="flex gap-1 overflow-x-auto no-scrollbar max-w-[50%]">
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">El</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Kitap</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-roboto')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-roboto text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Daktilo</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-lora')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-lora text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Şık</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-oswald')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-oswald text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Modern</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-caveat')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-caveat text-sm border border-transparent hover:border-gray-200 whitespace-nowrap">İnci</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-pacifico')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-pacifico text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Retro</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-comfortaa')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-comfortaa text-xs border border-transparent hover:border-gray-200 whitespace-nowrap">Yuvarlak</button>
+                            <div class="flex gap-1">
+                                <button onmousedown="event.preventDefault()" onclick="undo()" class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Geri Al"><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+                                <button onmousedown="event.preventDefault()" onclick="redo()" class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="İleri Al"><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+                                <div class="w-px h-6 bg-gray-200 mx-1"></div>
+                                <!-- TEK FONT BUTONU -->
+                                <button onmousedown="event.preventDefault()" onclick="toggleFontMenu()" class="flex items-center gap-1 p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-bold text-sm border border-transparent hover:border-gray-200">
+                                    <span>Aa</span> <i data-lucide="chevron-up" class="w-3 h-3"></i>
+                                </button>
                             </div>
                             <div class="flex gap-3 shrink-0">
                                 <button onmousedown="event.preventDefault()" onclick="toggleZenMode()" class="p-2 rounded-full text-gray-500 hover:bg-gray-100 transition-colors" title="Zen Modu"><i data-lucide="maximize" class="w-5 h-5"></i></button>
@@ -1462,9 +1304,31 @@
             </div>
         </div>
     </div>
-    <!-- Settings, Confirm Modal, Toast Container -->
+    <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
+            <div class="p-4 flex justify-between items-center bg-gray-800">
+                <button onclick="closeWp()" class="text-white p-2 hover:bg-white/10 rounded-full"><i data-lucide="x"></i></button>
+                <span class="text-xs font-mono text-gray-400 bg-black/30 px-2 py-1 rounded" id="wp-count">Görsel</span>
+            </div>
+            <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500 relative" style="background-color: #25D366;">
+                <div id="wp-text" contenteditable="true" class="w-full h-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:outline-none overflow-y-auto flex flex-col justify-center items-center break-words p-2"></div>
+            </div>
+            <div class="p-4 bg-gray-900 space-y-4 border-t border-gray-800">
+                <div class="flex justify-center gap-4 overflow-x-auto py-2">
+                    <button onclick="setWpColor('#25D366')" class="w-8 h-8 rounded-full bg-[#25D366] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#FF5252')" class="w-8 h-8 rounded-full bg-[#FF5252] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#448AFF')" class="w-8 h-8 rounded-full bg-[#448AFF] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#7C4DFF')" class="w-8 h-8 rounded-full bg-[#7C4DFF] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                    <button onclick="setWpColor('#212121')" class="w-8 h-8 rounded-full bg-[#212121] border-2 border-white/20 hover:scale-110 transition-transform"></button>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="runAI('whatsapp')" class="bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-gray-700 transition-colors"><i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i> AI Sığdır</button>
+                    <button onclick="saveWpToNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-indigo-900/20 transition-colors">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div id="settings-modal" class="fixed inset-0 z-[70] hidden bg-black/50 flex items-center justify-center p-4">
-        <!-- Settings Content ... -->
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl transform transition-all scale-100">
             <h2 class="text-xl font-bold mb-4 flex items-center text-gray-800"><i data-lucide="settings" class="mr-2 text-indigo-600"></i> Ayarlar & Yedek</h2>
             <div class="mb-4">
@@ -1483,14 +1347,14 @@
                 <input type="file" id="import-file" class="hidden" accept=".json" onchange="importBackup(this)">
             </div>
             <div class="flex justify-end gap-2 pt-2 border-t">
+                 <!-- YENİ BUTON: VERİLERİ KURTAR -->
+                <button onclick="manualRecovery()" class="text-blue-600 text-sm hover:bg-blue-50 px-4 py-2 rounded-lg transition-colors mr-auto">Eski Verileri Tara & Getir</button>
                 <button onclick="toggleSettings()" class="text-gray-500 text-sm hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors">Kapat</button>
                 <button onclick="saveAiKey()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-md transition-colors">Kaydet</button>
             </div>
         </div>
     </div>
-    
     <div id="confirm-modal" class="fixed inset-0 z-[80] hidden bg-black/50 flex items-center justify-center p-4">
-        <!-- Confirm Content ... -->
         <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl text-center transform transition-all scale-100">
             <div class="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
                 <i data-lucide="alert-triangle" class="w-6 h-6 text-red-600"></i>
@@ -1503,58 +1367,6 @@
             </div>
         </div>
     </div>
-    
-    <!-- YOUTUBE MODAL EKSİKTİ, EKLENDİ -->
-    <div id="yt-modal" class="fixed inset-0 z-[75] hidden bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold flex items-center text-red-600"><i data-lucide="youtube" class="mr-2"></i> YouTube Asistanı</h3>
-                <button onclick="closeYouTubeMode()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
-                <h4 class="font-bold text-gray-700 text-sm mb-2">🚀 Mobilde Metin Nasıl Alınır?</h4>
-                <div class="flex flex-col gap-3 text-xs text-gray-600">
-                    <p>Mobil uygulamada metni seçmek zordur. Kolay yolu şudur:</p>
-                    <div class="flex gap-2">
-                        <a href="https://youtubetranscript.com/" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 1
-                        </a>
-                        <a href="https://downsub.com/" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-center flex items-center justify-center gap-2 transition-colors flex-1 no-underline">
-                            <i data-lucide="external-link" class="w-4 h-4"></i> Sunucu 2
-                        </a>
-                    </div>
-                </div>
-            </div>
-            <textarea id="yt-transcript" class="w-full h-40 border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-300 outline-none resize-none mb-4 font-mono text-gray-600" placeholder="⚠️ Link değil, videonun yazılarını (transkripti) buraya yapıştır..."></textarea>
-            <button onclick="processYouTubeTranscript()" class="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold shadow-lg transition-colors flex justify-center items-center gap-2">
-                <i data-lucide="sparkles" class="w-4 h-4 text-yellow-300"></i> Barışça Özetle
-            </button>
-        </div>
-    </div>
-
-    <!-- WHATSAPP MODAL EKSİKTİ, EKLENDİ -->
-    <div id="wp-modal" class="fixed inset-0 z-[60] hidden bg-black/90 flex items-center justify-center p-4">
-        <div class="w-full max-w-sm bg-gray-900 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[85vh]">
-            <div class="p-4 flex justify-between items-center bg-gray-800">
-                <button onclick="closeWp()" class="text-white p-2 hover:bg-white/10 rounded-full"><i data-lucide="x"></i></button>
-                <span class="text-xs font-mono text-gray-400 bg-black/30 px-2 py-1 rounded" id="wp-count">Görsel</span>
-            </div>
-            <div id="wp-preview" class="flex-1 flex items-center justify-center p-6 transition-colors duration-500 relative" style="background-color: #25D366;">
-                <div id="wp-text" contenteditable="true" class="w-full h-full bg-transparent border-none text-center text-white text-2xl font-['Patrick_Hand'] focus:outline-none overflow-y-auto flex flex-col justify-center items-center break-words p-2"></div>
-            </div>
-            <div class="p-4 bg-gray-900 space-y-4 border-t border-gray-800">
-                <div class="flex justify-center gap-4 overflow-x-auto py-2">
-                    <button onclick="setWpColor('#25D366')" class="w-8 h-8 rounded-full bg-[#25D366] border-2 border-white/20 hover:scale-110 transition-transform"></button>
-                    <!-- Diğer renk butonları -->
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <button onclick="runAI('whatsapp')" class="bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border border-gray-700 transition-colors"><i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i> AI Sığdır</button>
-                    <button onclick="saveWpToNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-indigo-900/20 transition-colors">Kaydet</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div id="toast-container" class="fixed top-5 left-1/2 -translate-x-1/2 z-[90] space-y-2 pointer-events-none"></div>
 </body>
 </html>
