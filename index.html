@@ -15,14 +15,18 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v39'; // V39 - Gemini 1.5 Flash, Klavye Tuşu, Yeni Fontlar
+        const CURRENT_KEY = 'baris_final_notes_v40'; // V40 - Gemini 2.5 Flash Preview, Klavye Fix, Layout Fix
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
+        
+        // GÜNCEL ÇALIŞAN MODEL (Hata vermemesi için bunu kullanıyoruz)
+        const AI_MODEL = "gemini-2.5-flash-preview-09-2025";
        
         // Tüm eski versiyon anahtarları (Kurtarma için)
         const LEGACY_KEYS = [
             'baris_final_notes_v30', 'baris_final_notes_v31', 'baris_final_notes_v32', 
             'baris_final_notes_v33', 'baris_final_notes_v34', 'baris_final_notes_v35', 
-            'baris_final_notes_v36', 'baris_final_notes_v37', 'baris_final_notes_v38'
+            'baris_final_notes_v36', 'baris_final_notes_v37', 'baris_final_notes_v38',
+            'baris_final_notes_v39'
         ];
        
         let notes = [];
@@ -88,7 +92,7 @@
             const editor = document.getElementById('note-content');
             const titleEditor = document.getElementById('note-title');
             
-            // KLAVYE BUTONU MANTIĞI
+            // KLAVYE BUTONU MANTIĞI (Daha Hassas)
             const toggleKeyboardBtn = (show) => {
                 const btn = document.getElementById('keyboard-dismiss-btn');
                 if(show) {
@@ -105,15 +109,17 @@
                 el.addEventListener('touchend', () => setTimeout(checkSelection, 50)); 
                 el.addEventListener('input', () => setTimeout(checkSelection, 50));
                 
+                // Klavye açıldığında butonu göster
                 el.addEventListener('focus', () => toggleKeyboardBtn(true));
-                // Blur olduğunda hemen kapatma, belki butona basıyordur
+                // Klavye kapandığında (blur) butonu gizle (hafif gecikmeli)
                 el.addEventListener('blur', (e) => {
-                    // Eğer yeni odaklanılan eleman klavye butonu değilse gizle
                     setTimeout(() => {
+                        // Eğer odağı alan yeni eleman klavye butonu değilse gizle
+                        // (Butona basınca klavye kapanır ama buton kaybolmaz hemen)
                         if (document.activeElement.id !== 'keyboard-dismiss-btn') {
                             toggleKeyboardBtn(false);
                         }
-                    }, 150);
+                    }, 200);
                 });
             });
            
@@ -194,6 +200,17 @@
                             title="${color}"></button>
                 `;
             });
+            
+            // Özel Renk Seçici
+             html += `
+                <div class="relative group shrink-0 ml-1">
+                    <input type="color" id="custom-color-picker" class="absolute inset-0 opacity-0 w-10 h-10 cursor-pointer" onchange="applyColor(this.value)">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
+                        <i data-lucide="plus" class="w-5 h-5 text-white"></i>
+                    </button>
+                </div>
+            `;
+            
             container.innerHTML = html;
             if (window.lucide) lucide.createIcons();
         }
@@ -202,7 +219,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v38'); 
+                 const prevData = localStorage.getItem('baris_final_notes_v39'); 
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -432,9 +449,7 @@
         function setFont(fontClass) {
             currentFont = fontClass;
             const editor = document.getElementById('note-content');
-            // Mevcut classları koru, sadece fontu değiştir
-            const classes = editor.className.split(' ').filter(c => !c.startsWith('font-')).join(' ');
-            editor.className = `${classes} ${fontClass}`;
+            editor.className = `w-full h-full p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
         }
         function applyColor(color) {
             document.execCommand('styleWithCSS', false, true);
@@ -513,7 +528,7 @@
         function toggleKeyboard() {
             if (document.activeElement) {
                 document.activeElement.blur();
-                // showToast("Klavye kapatıldı ⌨️", "success");
+                // Butonu hemen gizleme, blur event'i halledecek
             }
         }
 
@@ -601,8 +616,8 @@
             if(!apiKey) return showToast("API Anahtarı eksik!", "error");
             showToast("Sihir yapılıyor...", "success");
             try {
-                // MODEL FIX: gemini-1.5-flash kullanılıyor (STABLE)
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // MODEL UPDATE
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
@@ -612,7 +627,6 @@
                 let cleanResult = result.replace(/^```html\s*/i, '').replace(/```$/, '').trim();
                 
                 if (cleanResult) {
-                    // İşaretleme temizle
                     cleanResult = cleanResult.replace(/\*\*/g, '').replace(/\*/g, '');
                     document.execCommand('insertText', false, cleanResult);
                     showToast("Sihirli değnek dokundu! ✨", "success");
@@ -624,9 +638,11 @@
             isZenMode = !isZenMode;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
+            const palette = document.getElementById('color-scroll-area');
             if (isZenMode) {
                 modal.classList.add('!inset-0', '!max-w-none', '!rounded-none');
-                if(toolbar) toolbar.classList.add('opacity-0', 'pointer-events-none');
+                if(toolbar) toolbar.classList.add('hidden');
+                if(palette) palette.classList.add('hidden');
                 document.getElementById('modal-cats').classList.add('hidden');
                 document.querySelector('.modal-header').classList.add('border-transparent');
                 showToast("Zen Modu", "success");
@@ -636,8 +652,10 @@
             isZenMode = false;
             const modal = document.getElementById('modal-panel');
             const toolbar = document.querySelector('.bottom-toolbar-container');
+            const palette = document.getElementById('color-scroll-area');
             modal.classList.remove('!inset-0', '!max-w-none', '!rounded-none');
-            if(toolbar) toolbar.classList.remove('opacity-0', 'pointer-events-none');
+            if(toolbar) toolbar.classList.remove('hidden');
+            if(palette) palette.classList.remove('hidden');
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('.modal-header').classList.remove('border-transparent');
         }
@@ -869,8 +887,8 @@
             else if (action === 'whatsapp') prompt = `WhatsApp durumu (max 700 karakter) için düzenle. Emoji ekle. ${multiColorHighlight} Metin: ${text}`;
             
             try {
-                // MODEL FIX: gemini-1.5-flash kullanılıyor (STABLE)
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // MODEL FIX: gemini-2.5-flash-preview-09-2025 kullanılıyor (EN GÜNCEL VE ÇALIŞAN)
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${apiKey}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
                 const data = await res.json();
@@ -976,6 +994,17 @@
             document.getElementById('toast-container').appendChild(div);
             setTimeout(() => div.remove(), 3000);
         }
+        
+        // KLAVYE KAPATMA (OKEY) FONKSİYONU
+        function toggleKeyboard() {
+            const editor = document.getElementById('note-content');
+            const title = document.getElementById('note-title');
+            
+            if (document.activeElement === editor || document.activeElement === title) {
+                document.activeElement.blur();
+                showToast("Klavye kapatıldı ⌨️", "success");
+            }
+        }
     </script>
     <style>
         body {
@@ -1053,6 +1082,7 @@
             flex-shrink: 0; 
             box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.05);
         }
+        /* Renk Paleti Satırı (Toolbar Üstü - Sabit Görünüm) */
         .palette-row {
             background-color: #f9fafb;
             border-top: 1px solid #e5e7eb;
@@ -1061,13 +1091,15 @@
             padding: 8px 12px;
             display: flex;
             align-items: center;
-            -ms-overflow-style: none;  
-            scrollbar-width: none;  
+            /* Scrollbar gizleme */
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
         }
         .palette-row::-webkit-scrollbar {
             display: none;
         }
 
+        /* Screenshot Fix: Absolute Overlay + Auto Height */
         #modal-panel.screenshot-mode {
             position: absolute !important;
             inset: 0 !important;
