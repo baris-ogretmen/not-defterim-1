@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>
         // --- AYARLAR & VERİ YÖNETİMİ ---
-        const CURRENT_KEY = 'baris_final_notes_v34'; // V34 - Tek Dokunuşla Menü, Akıllı Kelime Seçimi, Renk Reset
+        const CURRENT_KEY = 'baris_final_notes_v35'; // V35 - Devasa Renk Paleti, Fosforlu Kalem, Font Boyutu
         const UNIVERSAL_KEY = 'baris_universal_db_v1';
        
         // Tüm eski versiyon anahtarları (Kurtarma için)
@@ -30,7 +30,7 @@
             'baris_final_notes_v23', 'baris_final_notes_v24', 'baris_final_notes_v25',
             'baris_final_notes_v26', 'baris_final_notes_v27', 'baris_final_notes_v28',
             'baris_final_notes_v29_special_ed', 'baris_final_notes_v30', 'baris_final_notes_v31',
-            'baris_final_notes_v32', 'baris_final_notes_v33'
+            'baris_final_notes_v32', 'baris_final_notes_v33', 'baris_final_notes_v34'
         ];
        
         let notes = [];
@@ -42,6 +42,7 @@
         let currentFont = 'font-hand';
         let currentCat = 'guncel';
         let isZenMode = false;
+        let isHighlightMode = false; // Fosforlu Kalem Modu
         
         // Kategori Renk Eşleşmeleri
         const CATEGORY_COLORS = {
@@ -61,16 +62,25 @@
             'kisisel': 'Kişisel', 'diger': 'Diğer'
         };
 
-        // DEV RENK PALETİ
+        // DEVASA RENK PALETİ (50+ Renk)
         const COLORS = [
-            '#000000', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#2563eb', '#9333ea', // Klasikler
-            '#db2777', '#e11d48', '#7c3aed', '#4f46e5', '#0284c7', '#0d9488', '#059669', // Canlılar
-            '#84cc16', '#facc15', '#fb923c', '#f87171', '#f472b6', '#a78bfa', '#818cf8', // Pasteller
-            '#60a5fa', '#38bdf8', '#2dd4bf', '#34d399', '#a3e635', '#fde047', '#fbbf24'  // Neonumsu
+            '#000000', '#374151', '#4b5563', '#9ca3af', // Griler
+            '#dc2626', '#ef4444', '#f87171', '#fca5a5', // Kırmızılar
+            '#ea580c', '#f97316', '#fb923c', '#fdba74', // Turuncular
+            '#ca8a04', '#eab308', '#facc15', '#fde047', // Sarılar
+            '#65a30d', '#84cc16', '#a3e635', '#bef264', // Lime
+            '#16a34a', '#22c55e', '#4ade80', '#86efac', // Yeşiller
+            '#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', // Turkuaz
+            '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', // Cyan
+            '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', // Maviler
+            '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', // İndigo
+            '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', // Morlar
+            '#9333ea', '#a855f7', '#c084fc', '#d8b4fe', // Purple
+            '#db2777', '#ec4899', '#f472b6', '#fbcfe8', // Pembeler
+            '#e11d48', '#f43f5e', '#fb7185', '#fda4af'  // Gül
         ];
         
-        // Varsayılan metin rengi (Reset için)
-        const DEFAULT_TEXT_COLOR = '#374151'; // Gray-700
+        const DEFAULT_TEXT_COLOR = '#374151'; 
 
         // --- BAŞLATMA ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -78,7 +88,7 @@
             loadNotes();
             setupVoice();
             renderColorPalette();
-            // CSS stili komutları aktif et (Daha güçlü renk değişimi ve AI stillerini ezmek için)
+            // CSS stili komutları aktif et
             document.execCommand('styleWithCSS', false, true);
             
             if (window.lucide) lucide.createIcons();
@@ -87,10 +97,9 @@
             const titleEditor = document.getElementById('note-title');
             
             [editor, titleEditor].forEach(el => {
-                // Sadece click ve keyup değil, her türlü etkileşimde kontrol et
-                el.addEventListener('mouseup', () => setTimeout(checkSelection, 10)); // Gecikme önemli
+                el.addEventListener('mouseup', () => setTimeout(checkSelection, 10)); 
                 el.addEventListener('keyup', () => setTimeout(checkSelection, 10));
-                el.addEventListener('touchend', () => setTimeout(checkSelection, 50)); // Mobil için kritik
+                el.addEventListener('touchend', () => setTimeout(checkSelection, 50)); 
                 el.addEventListener('input', () => setTimeout(checkSelection, 50));
             });
            
@@ -98,19 +107,54 @@
             if(key) document.getElementById('gemini-key').value = key;
         });
 
+        function toggleHighlightMode(mode) {
+            isHighlightMode = mode;
+            // UI Güncelleme
+            const textBtn = document.getElementById('btn-mode-text');
+            const highlightBtn = document.getElementById('btn-mode-highlight');
+            
+            if (mode) {
+                textBtn.classList.remove('bg-gray-800', 'text-white');
+                textBtn.classList.add('bg-white', 'text-gray-600');
+                highlightBtn.classList.add('bg-yellow-400', 'text-white', 'border-yellow-500');
+                highlightBtn.classList.remove('bg-white', 'text-gray-600', 'border-gray-200');
+                showToast("Fosforlu Kalem Modu Açık 🖍️", "success");
+            } else {
+                textBtn.classList.add('bg-gray-800', 'text-white');
+                textBtn.classList.remove('bg-white', 'text-gray-600');
+                highlightBtn.classList.remove('bg-yellow-400', 'text-white', 'border-yellow-500');
+                highlightBtn.classList.add('bg-white', 'text-gray-600', 'border-gray-200');
+                showToast("Yazı Rengi Modu Açık 🅰️", "success");
+            }
+        }
+
         function renderColorPalette() {
             const container = document.getElementById('color-palette');
-            // Sıfırla butonu en başa
+            
             let html = `
-                <div class="relative group shrink-0" title="Rengi Sıfırla (Orijinal)">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="applyColor('${DEFAULT_TEXT_COLOR}')" class="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-300 shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
-                        <i data-lucide="x" class="w-5 h-5 text-gray-500"></i>
+                <!-- Mod Seçici -->
+                <div class="flex gap-1 shrink-0 mr-2 bg-gray-100 p-1 rounded-full items-center">
+                    <button id="btn-mode-text" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(false)" class="w-8 h-8 rounded-full bg-gray-800 text-white flex items-center justify-center transition-all shadow-sm">
+                        <span class="font-serif font-bold text-lg">A</span>
+                    </button>
+                    <button id="btn-mode-highlight" onmousedown="event.preventDefault()" onclick="toggleHighlightMode(true)" class="w-8 h-8 rounded-full bg-white text-gray-600 flex items-center justify-center transition-all border border-gray-200">
+                        <i data-lucide="highlighter" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <div class="w-px h-8 bg-gray-300 mx-2 shrink-0 rounded-full"></div>
-                <div class="relative group shrink-0">
+
+                <div class="w-px h-8 bg-gray-300 mx-1 shrink-0 rounded-full"></div>
+
+                <!-- Sıfırla -->
+                <div class="relative group shrink-0" title="Rengi Sıfırla">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" onclick="resetColor()" class="w-10 h-10 rounded-full bg-white border-2 border-gray-200 shadow-sm flex items-center justify-center transform active:scale-90 transition-transform">
+                        <i data-lucide="eraser" class="w-4 h-4 text-gray-500"></i>
+                    </button>
+                </div>
+                
+                <!-- Özel Renk -->
+                <div class="relative group shrink-0 ml-1">
                     <input type="color" id="custom-color-picker" class="absolute inset-0 opacity-0 w-10 h-10 cursor-pointer" onchange="applyColor(this.value)">
-                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
+                    <button onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()" class="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500 border-2 border-white shadow-md flex items-center justify-center transform active:scale-90 transition-transform">
                         <i data-lucide="plus" class="w-5 h-5 text-white"></i>
                     </button>
                 </div>
@@ -119,9 +163,9 @@
             
             COLORS.forEach(color => {
                 html += `
-                    <button onmousedown="event.preventDefault()" applyColor('${color}')" 
+                    <button onmousedown="event.preventDefault()" onclick="applyColor('${color}')" 
                             ontouchstart="event.preventDefault(); applyColor('${color}')"
-                            class="w-10 h-10 rounded-full border-2 border-white shadow-md hover:scale-110 active:scale-90 transition-transform shrink-0" 
+                            class="w-10 h-10 rounded-full border-2 border-white shadow-sm hover:scale-110 active:scale-90 transition-transform shrink-0" 
                             style="background-color: ${color};" 
                             title="${color}"></button>
                 `;
@@ -134,7 +178,7 @@
         function performUltimateMigration() {
             let allNotes = JSON.parse(localStorage.getItem(UNIVERSAL_KEY) || '[]');
             if (allNotes.length === 0) {
-                 const prevData = localStorage.getItem('baris_final_notes_v33'); // v33 kontrolü
+                 const prevData = localStorage.getItem('baris_final_notes_v34'); 
                  if(prevData) allNotes = JSON.parse(prevData);
             }
             const existingIds = new Set(allNotes.map(n => n.id));
@@ -367,14 +411,13 @@
             editor.className = `w-full h-full p-6 lg:p-8 outline-none text-lg leading-relaxed text-gray-700 ${fontClass}`;
         }
         
-        // --- GELİŞMİŞ RENK UYGULAMA (SEÇİM YOKSA KELİMEYİ BUL) ---
+        // --- GELİŞMİŞ RENK UYGULAMA (SİHİRLİ SEÇİM) ---
         function applyColor(color) {
-            // Önce CSS modunu garantile (span style='color:...' kullanır)
             document.execCommand('styleWithCSS', false, true);
             
             const selection = window.getSelection();
             
-            // Eğer seçim yoksa (imleç yanıp sönüyorsa), imlecin olduğu kelimeyi seç!
+            // Seçim yoksa (imleç yanıp sönüyorsa), kelimeyi otomatik seç
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if (wordRange) {
@@ -383,23 +426,53 @@
                 }
             }
 
-            // Rengi uygula (AI classlarını ezmek için styleWithCSS şart)
-            document.execCommand('foreColor', false, color);
+            // Moda göre işlem yap
+            if (isHighlightMode) {
+                // Fosforlu Kalem Modu (Arka Plan)
+                document.execCommand('hiliteColor', false, color);
+            } else {
+                // Yazı Rengi Modu
+                document.execCommand('foreColor', false, color);
+            }
             
-            // Seçimi temizle ki renk net görünsün
             selection.removeAllRanges();
             
-            // Menüleri kapat
             document.getElementById('floating-menu').classList.add('hidden');
             document.getElementById('floating-colors').classList.add('hidden');
         }
+
+        // Rengi Sıfırla (Temizle)
+        function resetColor() {
+            document.execCommand('styleWithCSS', false, true);
+            const selection = window.getSelection();
+            
+            if (selection.isCollapsed) {
+                const wordRange = getWordAtCaret();
+                if (wordRange) {
+                    selection.removeAllRanges();
+                    selection.addRange(wordRange);
+                }
+            }
+            // Hem yazı rengini hem arka planı temizle
+            document.execCommand('removeFormat', false, null); // Formatı temizle
+            document.execCommand('foreColor', false, DEFAULT_TEXT_COLOR); // Varsayılan renk
+            
+            selection.removeAllRanges();
+            document.getElementById('floating-menu').classList.add('hidden');
+            document.getElementById('floating-colors').classList.add('hidden');
+        }
+
+        // Font Boyutu Değiştirme
+        function changeFontSize(size) {
+            document.execCommand('styleWithCSS', false, true);
+            document.execCommand('fontSize', false, size); // 1-7 arası değer alır
+        }
         
-        // İmlecin altındaki kelimeyi bulan yardımcı fonksiyon
         function getWordAtCaret() {
             const sel = window.getSelection();
             if (sel.rangeCount === 0) return null;
             const range = sel.getRangeAt(0);
-            if (!range.collapsed) return range; // Zaten seçim varsa onu kullan
+            if (!range.collapsed) return range;
 
             const node = range.startContainer;
             if (node.nodeType !== Node.TEXT_NODE) return null;
@@ -407,13 +480,12 @@
             const text = node.textContent;
             const offset = range.startOffset;
 
-            // Kelimenin başını ve sonunu bul (Boşluklara kadar git)
             let start = offset;
             while (start > 0 && /\S/.test(text[start - 1])) start--;
             let end = offset;
             while (end < text.length && /\S/.test(text[end])) end++;
 
-            if (start === end) return null; // Kelime yok
+            if (start === end) return null;
 
             const newRange = document.createRange();
             newRange.setStart(node, start);
@@ -442,7 +514,7 @@
             } 
             // 2. Durum: İmleç Kelime İçinde (Tek Dokunuş)
             else if (selection.isCollapsed) {
-                const wordRange = getWordAtCaret(); // Kelime var mı bak
+                const wordRange = getWordAtCaret(); 
                 if (wordRange) {
                     rect = wordRange.getBoundingClientRect();
                     show = true;
@@ -450,27 +522,23 @@
             }
 
             if (show && rect) {
-                // Menüyü konumlandır
                 let top = rect.top - 60;
                 if (top < 10) top = rect.bottom + 10; 
                 
                 floatingMenu.style.top = `${top}px`;
                 floatingMenu.style.left = `${rect.left + (rect.width / 2) - 80}px`; 
                 
-                // Alt menüler kapalıysa ana menüyü göster
                 if (document.getElementById('magic-options').classList.contains('hidden') && 
                     document.getElementById('floating-colors').classList.contains('hidden')) {
                     floatingMenu.classList.remove('hidden');
                 }
             } else {
-                // Sadece seçim yoksa ve kelime üstünde değilse gizle
                 floatingMenu.classList.add('hidden');
                 document.getElementById('magic-options').classList.add('hidden');
                 document.getElementById('floating-colors').classList.add('hidden');
             }
         }
 
-        // Ana Menü Fonksiyonları
         function showMagicOptions() {
             document.getElementById('floating-menu').classList.add('hidden');
             const menu = document.getElementById('magic-options');
@@ -487,10 +555,8 @@
             menu.classList.remove('hidden');
         }
 
-        // AI İşlemi
         function applyMagicFix(type) {
             const selection = window.getSelection();
-            // Seçim yoksa kelimeyi seç
             if (selection.isCollapsed) {
                 const wordRange = getWordAtCaret();
                 if(wordRange) {
@@ -560,7 +626,6 @@
             document.getElementById('modal-cats').classList.remove('hidden');
             document.querySelector('.modal-header').classList.remove('border-transparent');
         }
-        // --- EKRAN GÖRÜNTÜSÜ MODU ---
         function toggleScreenshotMode() {
             const modal = document.getElementById('modal-panel');
             modal.classList.toggle('screenshot-mode');
@@ -598,7 +663,6 @@
                 document.execCommand('insertHTML', false, '☐ ');
             }
         }
-        // --- YOUTUBE ASİSTANI (V26) ---
         function openYouTubeMode() {
             document.getElementById('yt-modal').classList.remove('hidden');
         }
@@ -628,7 +692,6 @@
            
             runAI('youtube_summary', transcript);
         }
-        // --- YEDEKLEME ---
         function exportBackup() {
             if (notes.length === 0) return showToast("Yedeklenecek not yok.", "error");
             const dataStr = JSON.stringify(notes, null, 2);
@@ -664,7 +727,6 @@
             };
             reader.readAsText(file);
         }
-        // --- AI ---
         function toggleAiMenu() { document.getElementById('ai-popup').classList.toggle('hidden'); }
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
        
@@ -1191,8 +1253,8 @@
                                 <button onmousedown="event.preventDefault()" onclick="undo()" class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Geri Al"><i data-lucide="undo-2" class="w-4 h-4"></i></button>
                                 <button onmousedown="event.preventDefault()" onclick="redo()" class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="İleri Al"><i data-lucide="redo-2" class="w-4 h-4"></i></button>
                                 <div class="w-px h-6 bg-gray-200 mx-1"></div>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-hand')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-hand text-sm border border-transparent hover:border-gray-200">El</button>
-                                <button onmousedown="event.preventDefault()" onclick="setFont('font-serif')" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-serif text-sm border border-transparent hover:border-gray-200">Kitap</button>
+                                <button onmousedown="event.preventDefault()" onclick="changeFontSize(3)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-bold text-xs border border-transparent hover:border-gray-200">A-</button>
+                                <button onmousedown="event.preventDefault()" onclick="changeFontSize(5)" class="p-2 rounded-lg hover:bg-gray-100 text-gray-600 font-bold text-lg border border-transparent hover:border-gray-200">A+</button>
                             </div>
                             
                             <div class="flex gap-3">
