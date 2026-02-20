@@ -74,7 +74,7 @@
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 
-        /* AI Vurgu Stilleri */
+        /* AI Vurgu Stilleri (Eski formatlara destek için) */
         .highlight-red { color: #dc2626; font-weight: 800; }
         .highlight-blue { color: #2563eb; font-weight: 800; }
         .highlight-marker { background-color: #fef08a; padding: 0 2px; border-radius: 4px; }
@@ -322,9 +322,13 @@
     <div id="settings-modal" class="fixed inset-0 hidden z-[200] bg-black/60 flex items-center justify-center p-6">
         <div class="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
             <h3 class="text-xl font-bold mb-6 flex items-center gap-2"><i data-lucide="settings"></i> Ayarlar</h3>
-            <div class="mb-6">
+            <div class="mb-4">
                 <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Gemini API Key</label>
                 <input type="password" id="api-key-input" class="w-full border p-3 rounded-xl bg-gray-50 focus:ring-2 ring-indigo-100 outline-none">
+            </div>
+            <div class="mb-6">
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Yapay Zeka Modeli</label>
+                <input type="text" id="api-model-input" class="w-full border p-3 rounded-xl bg-gray-50 focus:ring-2 ring-indigo-100 outline-none" placeholder="gemini-2.5-flash-preview-09-2025">
             </div>
             <div class="grid grid-cols-2 gap-3 mb-6">
                 <button onclick="manualBackup()" class="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center gap-2"><i data-lucide="download" class="text-green-600"></i><span class="text-[10px] font-bold">Yedek İndir</span></button>
@@ -341,7 +345,6 @@
 
     <script>
         const STORAGE_KEY = 'baris_ultimate_v106';
-        const AI_MODEL = 'gemini-2.5-flash-preview-09-2025';
         const CATEGORIES = {
             tarih: 'Tarih', dini: 'Dini', siyasi: 'Siyasi', 
             egitim: 'Eğitim', guncel: 'Güncel', is: 'İş', 
@@ -352,13 +355,20 @@
         const LEGACY_KEYS = ['baris_ultimate_v105','baris_ultimate_v104','baris_ultimate_v103','baris_ultimate_v102','baris_ultimate_v101','baris_ultimate_v100','baris_final_notes_v35','baris_universal_db_v1','baris_final_notes_v34','baris_final_notes_v33','baris_final_notes_v32','baris_final_notes_v31','baris_final_notes_v30','baris_final_notes_v29_special_ed'];
 
         let notes = [], currentFilter = 'all', activeNoteId = null, isListening = false, recognition = null, isHighlightMode = false, selectedCategory = 'guncel', selectedFont = 'font-hand';
+        let lastChosenColor = ''; // Kullanıcının seçtiği son metin rengini hafızada tutar
 
         window.onload = () => {
             migrateOldData(); loadNotes(); initVoice(); renderColorGrid();
             if(window.lucide) lucide.createIcons();
             document.addEventListener('selectionchange', checkSelection);
+            
+            // Ayarları Yükle
             const key = localStorage.getItem('gemini_api_key');
             if(key) document.getElementById('api-key-input').value = key;
+            const savedModel = localStorage.getItem('gemini_api_model');
+            if(savedModel) document.getElementById('api-model-input').value = savedModel;
+            else document.getElementById('api-model-input').value = 'gemini-2.5-flash-preview-09-2025';
+
             const editor = document.getElementById('note-content');
             editor.oninput = () => {
                 const count = editor.innerText.trim().split(/\s+/).filter(x => x.length > 0).length;
@@ -539,8 +549,12 @@
                 document.execCommand('removeFormat', false, null); // Formatı sil
                 document.execCommand('foreColor', false, '#374151'); // Varsayılan griye dön
             } else {
-                if(isHighlightMode) document.execCommand('hiliteColor', false, c);
-                else document.execCommand('foreColor', false, c);
+                if(isHighlightMode) {
+                    document.execCommand('hiliteColor', false, c);
+                } else {
+                    document.execCommand('foreColor', false, c);
+                    lastChosenColor = c; // AI kullanımları için seçilen en son rengi bellekte tut
+                }
             }
             closeAllMenus();
         }
@@ -564,7 +578,11 @@
         function checkSelection() {
             const sel = window.getSelection();
             const pill = document.getElementById('floating-pill-menu');
-            if (document.getElementById('note-content').contains(sel.anchorNode) && !document.getElementById('ai-loading').classList.contains('flex')) {
+            const editorNode = document.getElementById('note-content');
+            const titleNode = document.getElementById('note-title');
+
+            // Hem başlıkta hem metinde çalışsın
+            if ((editorNode.contains(sel.anchorNode) || titleNode.contains(sel.anchorNode)) && !document.getElementById('ai-loading').classList.contains('flex')) {
                 let rect;
                 if (sel.toString().trim().length > 0) { rect = sel.getRangeAt(0).getBoundingClientRect(); } 
                 else if(sel.isCollapsed) { const range = getWordAtCaret(); if(range) rect = range.getBoundingClientRect(); }
@@ -633,14 +651,20 @@
             const editor = document.getElementById('note-content');
             const text = customText || editor.innerText;
             if(!text.trim() && action !== 'analyze_mood' && action !== 'generate_title') return showToast("Metin yok!", "error");
+            
             const key = localStorage.getItem('gemini_api_key');
+            const AI_MODEL = localStorage.getItem('gemini_api_model') || 'gemini-2.5-flash-preview-09-2025';
+            
             if(!key) { toggleSettings(); return showToast("API Anahtarı girin.", "error"); }
             closeAllMenus();
             document.getElementById('ai-loading').classList.remove('hidden');
             document.getElementById('ai-loading').classList.add('flex');
             
             let persona = `Sen Barış'ın (Özel Eğitimci, Öğretmen) asistanısın. Metin: "${text}". `;
-            const highlighter = `Önemli yerleri <span class='highlight-red'>Kırmızı</span>, <span class='highlight-blue'>Mavi</span> ve <span class='highlight-marker'>Fosforlu</span> HTML etiketleriyle vurgula. `;
+            
+            // Eğer paletten bir renk seçildiyse onu kullan, yoksa mavi yap.
+            const preferredColor = lastChosenColor || '#2563eb'; 
+            const highlighter = `Önemli yerleri <span style='color: ${preferredColor}; font-weight: 800;'>Renkli</span> ve <span class='highlight-marker'>Fosforlu</span> HTML etiketleriyle vurgula. `;
 
             const prompts = {
                 generate_title: `Bu metni analiz et ve en uygun, kısa başlığı yaz. Tırnak kullanma.`,
@@ -676,7 +700,12 @@
                 const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 if(result) {
                     const clean = result.replace(/^```html\s*/i, '').replace(/```$/, '').trim();
-                    if(action === 'generate_title') { document.getElementById('note-title').innerHTML = clean; showToast("Başlık oluşturuldu!", "success"); }
+                    if(action === 'generate_title') { 
+                        // Yapay zekanın bulduğu başlığı paletten seçili en son renkle yazar
+                        const titleHtml = lastChosenColor ? `<span style="color: ${lastChosenColor}">${clean}</span>` : clean;
+                        document.getElementById('note-title').innerHTML = titleHtml; 
+                        showToast("Başlık oluşturuldu!", "success"); 
+                    }
                     else if(action === 'analyze_mood') { document.getElementById('note-title').innerHTML = clean + " " + document.getElementById('note-title').innerHTML; }
                     else if(action === 'whatsapp_status') { document.getElementById('wp-text').innerHTML = clean; document.getElementById('wp-modal').classList.remove('hidden'); }
                     else { editor.innerHTML += `<br><br><div class='bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 mt-4 shadow-sm'>${clean}</div>`; showToast("Tamamlandı ✨", "success"); }
@@ -688,9 +717,13 @@
         async function magicAction(type) {
             const sel = window.getSelection().toString();
             if(!sel) return showToast("Metin seçmelisin!", "error");
+            
             const key = localStorage.getItem('gemini_api_key');
+            const AI_MODEL = localStorage.getItem('gemini_api_model') || 'gemini-2.5-flash-preview-09-2025';
+
             let p = `Bu metni ${type === 'grammar' ? 'düzelt' : type === 'enrich' ? 'zenginleştir' : 'resmileştir'}: "${sel}". Sadece sonucu ver.`;
             if(type === 'translate') p = `Bu metni İngilizceye çevir: "${sel}". Sadece sonucu ver.`;
+            
             document.getElementById('ai-loading').classList.remove('hidden'); document.getElementById('ai-loading').classList.add('flex');
             try {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${key}`, {
@@ -724,7 +757,12 @@
         }
 
         function toggleSettings() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-        function saveSettings() { localStorage.setItem('gemini_api_key', document.getElementById('api-key-input').value); showToast("Ayarlar Kaydedildi ✅", "success"); toggleSettings(); }
+        function saveSettings() { 
+            localStorage.setItem('gemini_api_key', document.getElementById('api-key-input').value); 
+            localStorage.setItem('gemini_api_model', document.getElementById('api-model-input').value); 
+            showToast("Ayarlar Kaydedildi ✅", "success"); 
+            toggleSettings(); 
+        }
         function manualBackup() {
             const data = localStorage.getItem(STORAGE_KEY);
             const blob = new Blob([data], {type: 'application/json'});
@@ -751,3 +789,4 @@
     </script>
 </body>
 </html>
+
